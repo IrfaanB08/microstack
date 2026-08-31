@@ -62,7 +62,7 @@ class User {
       age,
       sex,
       activity_level,
-      dietary_preferences,
+      dietary_preferences ? JSON.stringify(dietary_preferences) : null,
       weekly_grocery_budget,
       prep_time_preference,
       eating_out_frequency,

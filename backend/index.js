@@ -16,8 +16,13 @@ app.get('/api/health', (req, res) => {
   res.json({ message: 'Microstack API is running', status: 'healthy' });
 });
 
+// Auth routes
+app.use('/api/auth', require('./src/routes/auth'));
+
+// Macro calculation routes
+app.use('/api/macros', require('./src/routes/macros'));
+
 // Placeholder for future routes
-// app.use('/api/auth', require('./src/routes/auth'));
 // app.use('/api/users', require('./src/routes/users'));
 // app.use('/api/meal-plans', require('./src/routes/mealPlans'));
 
