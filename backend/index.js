@@ -22,9 +22,11 @@ app.use('/api/auth', require('./src/routes/auth'));
 // Macro calculation routes
 app.use('/api/macros', require('./src/routes/macros'));
 
+// Meal plan routes
+app.use('/api/meal-plans', require('./src/routes/mealPlans'));
+
 // Placeholder for future routes
 // app.use('/api/users', require('./src/routes/users'));
-// app.use('/api/meal-plans', require('./src/routes/mealPlans'));
 
 app.listen(PORT, () => {
   console.log(`Microstack backend running on port ${PORT}`);

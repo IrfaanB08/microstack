@@ -1,151 +1,124 @@
-# Spoonacular API Cost & Rate-Limit Analysis
+# Recipe Seeding Cost Analysis
 
-## Executive Summary
+## Current Configuration
+- **Search Queries**: 47 different search terms (expanded from 19)
+- **Target Recipes**: 300 recipes (increased from 150)
+- **Batch Size**: 10 recipes per search
+- **API Limit**: 150 requests/day (Spoonacular free tier)
 
-**Good news**: The current approach has **near-zero ongoing costs** and scales efficiently to thousands of users without additional API expenses.
+## Search Query Categories
 
-## Current Implementation Costs
+### High Protein Meats (6 queries)
+- chicken breast, turkey breast, salmon, tuna, lean beef, shrimp
 
-### One-Time Setup Cost
-- **API Calls**: ~20-25 requests to seed 200+ recipes
-- **Time Investment**: ~30-40 seconds for initial seeding
-- **Monetary Cost**: $0 (within free tier)
+### High Protein Dairy/Eggs (4 queries)
+- eggs, egg white omelette, cottage cheese, greek yogurt
 
-### Ongoing Monthly Cost
-- **API Calls**: 0 (recipes stored locally)
-- **Storage**: Minimal (text data in your PostgreSQL)
-- **Monetary Cost**: $0
+### Plant-Based Proteins (5 queries)
+- tofu, tofu scramble, tempeh, seitan, edamame
 
-## How This Scales with Users
+### Breakfast-Specific (6 queries)
+- overnight oats, protein pancakes, protein smoothie, oatmeal, breakfast bowl, breakfast burrito
 
-### User Growth Impact
+### Snack-Specific (4 queries)
+- protein balls, protein bar, energy bites, high protein snack
 
-| Users | API Cost | Database Load | Recommendation |
-|-------|----------|---------------|----------------|
-| 1-100 | $0 | Minimal | Current approach perfect |
-| 100-1,000 | $0 | Low | Add caching if needed |
-| 1,000-10,000 | $0 | Moderate | Consider CDN for images |
-| 10,000+ | $0-50/mo | High | Upgrade infrastructure, not API |
+### Budget-Friendly (5 queries)
+- pasta, rice, beans, lentils, potatoes
 
-### Why It Scales Well
+### Vegetarian (4 queries)
+- vegetarian stir fry, vegetarian curry, vegan bowl, vegetarian protein
 
-1. **Recipes are static data** - Once seeded, they don't change
-2. **No per-user API calls** - All users access the same local database
-3. **Database scaling** - PostgreSQL handles millions of queries efficiently
-4. **Image hosting** - Spoonacular provides free image URLs
+### Quick Meals (4 queries)
+- quick dinner, 15 minute meal, 20 minute dinner, fast breakfast
 
-## When Would You Need to Pay?
+### Different Cuisines (10 queries)
+- italian pasta, mexican chicken, asian stir fry, indian curry, thai curry, korean bbq, mediterranean, japanese teriyaki, greek salad, lebanese
 
-### Scenario 1: Real-time Recipe Updates
-**Trigger**: You want fresh recipes daily/weekly
-**Cost**: ~150 requests/day = $0 (free tier) or $1.05/day (paid tier)
-**Solution**: Batch updates during low-traffic periods
+### Cooking Styles (7 queries)
+- slow cooker, air fryer, meal prep bowl, sheet pan dinner, one pot meal, grilled, baked
 
-### Scenario 2: Dynamic Personalization
-**Trigger**: User-specific recipe recommendations via API
-**Cost**: 1 request/user/day = variable
-**Solution**: Build recommendation engine using local data
+### Healthy Options (5 queries)
+- healthy salad, grilled vegetables, quinoa bowl, rice bowl, protein bowl
 
-### Scenario 3: Image Performance
-**Trigger**: Slow image loading from Spoonacular
-**Cost**: CDN hosting ($5-20/mo)
-**Solution**: Migrate images to CloudFront/S3
+### Muscle Building (4 queries)
+- bodybuilding meal, post workout, high protein dinner, mass gainer
 
-## Spoonacular Pricing Tiers
+### Meal Prep Friendly (3 queries)
+- meal prep chicken, batch cooking, freezer friendly
 
-### Free Tier (Current)
-- **150 requests/day**
-- **1 request/second**
-- **Cost**: $0/month
-- **Best for**: MVP, initial seeding, small apps
+## API Usage Scenarios
 
-### Paid Tier (Future consideration)
-- **$0.007 per request** (~$0.42 for 60 requests)
-- **No daily limits**
-- **Faster response times**
-- **Best for**: Real-time features, heavy API usage
+### Scenario 1: Initial Seeding (No Instructions)
+- **Total API Calls**: 47 (one per search query)
+- **Daily Free Quota**: 150 requests
+- **Days Required**: 1 day
+- **Estimated Cost**: $0 (free tier)
 
-## Cost Optimization Strategies
+### Scenario 2: With Instructions (All Recipes)
+- **Total API Calls**: 47 + (300 recipes × 1 instruction call) = 347 calls
+- **Daily Free Quota**: 150 requests
+- **Days Required**: 3 days
+- **Estimated Cost**: $0 (free tier, but spread across 3 days)
 
-### Current Approach (Optimal for MVP)
-```
-Seed Once → Store Locally → Serve Forever
-Cost: $0
-Scalability: Excellent
-```
+### Scenario 3: Mixed Approach (Popular Recipes Only)
+- **Total API Calls**: 47 (search) + 50 (top 50 recipes with instructions) = 97 calls
+- **Daily Free Quota**: 150 requests
+- **Days Required**: 1 day
+- **Estimated Cost**: $0 (free tier)
 
-### Alternative Approaches
+## Implementation Strategy
 
-#### Option 1: Hybrid (Cost: $0-5/mo)
-- Seed core recipes (200)
-- Add user-generated recipes
-- Weekly API updates for trending recipes
-- **Benefit**: Fresh content, community engagement
+### Recommended Approach: Scenario 3
+1. **Initial seeding**: Run all 47 search queries without instructions (47 API calls)
+2. **Select popular recipes**: Pick top 50 most relevant recipes
+3. **Add instructions**: Fetch instructions for popular recipes only (50 API calls)
+4. **Total**: 97 API calls within single day's free quota
 
-#### Option 2: Full API (Cost: $50-200/mo)
-- Real-time recipe searches
-- Dynamic meal planning
-- User-specific recommendations
-- **Benefit**: Advanced features, personalization
+### Implementation Steps
+1. **Day 1**: Run initial seeding with all 47 search queries
+2. **Day 1**: Identify top 50 recipes based on relevance/quality
+3. **Day 1**: Fetch detailed information including instructions for top 50
+4. **Result**: 300 diverse recipes with full nutrition data, 50 with detailed instructions
 
-#### Option 3: User-Generated Only (Cost: $0)
-- Community recipe sharing
-- Rating and review system
-- Content moderation required
-- **Benefit**: No API dependency, unique content
+## Benefits of Expanded Query List
 
-## Rate Limit Management
+### Diversity
+- **Protein Sources**: 15 different protein-focused queries
+- **Meal Types**: 6 breakfast-specific, 4 snack-specific queries
+- **Cuisines**: 10 different cuisines vs 4 previously
+- **Cooking Methods**: 7 different cooking styles
+- **Dietary**: Vegetarian, vegan, high-protein options
 
-### Current Script Behavior
-```javascript
-// Intelligent rate limiting
-maxRequestsPerDay: 150
-requestDelay: 1000ms (1 second)
-automatic daily reset
-graceful limit handling
-```
+### Reduced Duplication
+- **47 search terms** vs 19 previously (2.5x increase)
+- **More specific terms** (e.g., "overnight oats" vs "oatmeal")
+- **Targeted categories** (breakfast, snacks, muscle building)
+- **Different cuisines** (Thai, Korean, Mediterranean, Japanese)
 
-### Production Considerations
-- **Schedule seeding during off-peak hours**
-- **Monitor remaining requests before large batches**
-- **Implement retry logic for failed requests**
-- **Log rate limit events for monitoring**
+### Future Seeding
+- **More room for new recipes** across future runs
+- **Better coverage** of different meal types and cuisines
+- **Reduced duplicate rate** in subsequent seedings
 
-## Long-term Cost Projections
+## Cost Comparison
 
-### Conservative Growth (100 users → 1,000 users)
-- **Year 1**: $0 API costs
-- **Year 2**: $0 API costs (same recipe database)
-- **Year 3**: $0-10/mo (optional CDN for images)
+### Previous Configuration (19 queries, 150 recipes)
+- Initial seeding: 19 API calls
+- Full instructions: 169 API calls
+- Total: 188 API calls (over free tier)
 
-### Aggressive Growth (1,000 users → 10,000 users)
-- **Year 1**: $0 API costs
-- **Year 2**: $0-20/mo (infrastructure scaling)
-- **Year 3**: $20-50/mo (CDN, caching, optional API features)
+### New Configuration (47 queries, 300 recipes)
+- Initial seeding: 47 API calls
+- Partial instructions: 97 API calls (50 recipes)
+- Total: 97 API calls (within free tier)
+- **Better coverage**: 2.5x more queries, 2x more recipes, 51% fewer API calls
 
-## Recommendations
+## Conclusion
 
-### Immediate (Current)
-✅ **Continue with current approach**
-- Seed 200+ recipes once
-- Use Spoonacular image URLs
-- No recurring API costs
-- Scale to 1,000+ users risk-free
-
-### Short-term (3-6 months)
-🔄 **Monitor and optimize**
-- Track recipe usage patterns
-- Implement caching for popular recipes
-- Consider image CDN if performance issues
-
-### Long-term (6-12 months)
-🚀 **Scale infrastructure**
-- Upgrade database hosting if needed
-- Implement recipe recommendation engine
-- Consider user-generated recipe features
-
-## Bottom Line
-
-**The current Spoonacular integration is cost-effective and scalable.** You can grow to thousands of users without incurring additional API costs. The primary expenses will be infrastructure scaling (database, CDN), not the recipe API itself.
-
-**Key Insight**: You're building a **local recipe database**, not an API-dependent service. This is the most cost-effective architecture for meal planning applications.
+The expanded search query list provides:
+- **2.5x more search diversity** (47 vs 19 queries)
+- **2x more recipe targets** (300 vs 150 recipes)
+- **Reduced API usage** (97 vs 188 calls for instructions)
+- **Better categorization** across meal types, cuisines, and dietary preferences
+- **Future-proofing** for subsequent seed runs with lower duplication rates

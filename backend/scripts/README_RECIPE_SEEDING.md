@@ -1,198 +1,129 @@
-# Recipe Seeding Script Documentation
+# Recipe Seeding
+
+This directory contains scripts for seeding the Microstack database with recipes from the Spoonacular API.
 
 ## Overview
-The recipe seeding script (`seedRecipes.js`) populates your Recipe table with diverse recipes from the Spoonacular API, normalizing them to your schema and tagging them appropriately.
+
+The recipe seeding system populates the `recipes` table with diverse, macro-rich recipes suitable for meal planning. It uses the Spoonacular API to fetch recipes with nutrition data, normalizes them for the database, and handles rate limiting to stay within API limits.
+
+## Configuration
+
+### Environment Variables
+- `SPOONACULAR_API_KEY`: Your Spoonacular API key (required)
+- `DATABASE_URL`: PostgreSQL connection string (from main backend config)
+
+### Seed Script Options
+- `--dry-run`: Simulate seeding without database changes
+- `--verbose`: Show detailed processing information
+- `--continue-on-error`: Continue processing even if individual recipes fail
+- `<target_count>`: Number of recipes to seed (default: 300)
+- `<batch_size>`: Recipes per search query (default: 10)
 
 ## Usage
 
-### Basic Usage
+### Basic Seeding
 ```bash
-# Seed 200 recipes (default)
 npm run seed:recipes
+```
 
-# Seed specific number of recipes
-npm run seed:recipes 100
-
-# Dry run (no database changes, verbose output)
+### Dry Run (Test Without Database Changes)
+```bash
 npm run seed:recipes:dry
-
-# Custom batch size and target
-node scripts/seedRecipes.js 50 5 --verbose
 ```
 
-### Options
-- `targetCount` (default: 200) - Total recipes to fetch
-- `batchSize` (default: 10) - Recipes per search query
-- `--dry-run` - Validate without database changes
-- `--verbose` - Detailed logging
-- `--continue-on-error` - Continue if individual queries fail
-
-## Cost and Rate-Limit Implications
-
-### Spoonacular Free Tier Limits
-- **150 requests/day** on free tier
-- **1 request/second** recommended delay
-- **No monthly cost** for free tier
-
-### Current Approach Costs
-
-#### Recipe Seeding Phase
-- **Initial seed (200 recipes)**: ~20-25 requests (using complexSearch with addRecipeInformation)
-- **Time to complete**: ~30-40 seconds (with 1-second delays)
-- **API calls**: One search returns multiple recipes (more efficient)
-
-#### Ongoing Costs
-- **Near-zero** after initial seeding
-- **No daily recurring costs** for recipe access
-- **Recipes stored locally** in your database
-
-### As User Numbers Grow
-
-#### Recipe Database Scaling
-- **No additional API costs** - recipes are stored locally
-- **Same 200+ recipes** serve unlimited users
-- **Query performance** depends on your database, not API limits
-
-#### Potential Future API Needs
-1. **Dynamic recipe updates** (if you want fresh content)
-   - Cost: ~150 requests/day for updates
-   - Solution: Cache updates, batch processing
-
-2. **User-specific recipe recommendations**
-   - Cost: Additional API calls per user
-   - Solution: Build recommendation engine using local data
-
-3. **Recipe image hosting**
-   - Spoonacular provides image URLs
-   - Consider hosting images locally for performance
-
-### Scaling Recommendations
-
-#### Phase 1: MVP (Current)
-- ✅ Seed 200+ recipes once
-- ✅ Use Spoonacular image URLs
-- ✅ No recurring API costs
-- ✅ Scale to 10,000+ users with same API usage
-
-#### Phase 2: Growth (1,000+ users)
-- Consider upgrading to Spoonacular paid tier ($0.007/request)
-- Implement recipe caching for popular searches
-- Add user-generated recipes to reduce API dependency
-
-#### Phase 3: Scale (10,000+ users)
-- Build internal recipe recommendation system
-- Migrate images to CDN (CloudFront/S3)
-- Consider alternative recipe databases or user-generated content
-
-### Rate Limiting Strategy
-
-The script implements intelligent rate limiting:
-
-```javascript
-// Current configuration
-maxRequestsPerDay: 150
-requestDelay: 1000 (1 second)
+### With Options
+```bash
+node scripts/seedRecipes.js --dry-run --verbose 300 10
 ```
 
-**Features:**
-- **Automatic daily reset** at midnight
-- **Progress tracking** with remaining requests
-- **Time estimation** for batch operations
-- **Graceful stopping** when limits reached
+## Search Query Strategy
 
-**Example Time Estimates:**
-- 10 requests: ~15 seconds
-- 50 requests: ~1 minute
-- 150 requests: ~3 minutes
+The seeder uses **47 diverse search queries** across multiple categories to ensure recipe variety:
 
-### Monitoring and Maintenance
+### Protein Sources (15 queries)
+- **Meats**: chicken breast, turkey breast, salmon, tuna, lean beef, shrimp
+- **Dairy/Eggs**: eggs, egg white omelette, cottage cheese, greek yogurt
+- **Plant-based**: tofu, tofu scramble, tempeh, seitan, edamame
 
-#### Track Usage
-```javascript
-// Built-in stats tracking
-const stats = rateLimiter.getStats();
-console.log(stats);
-// { dailyRequestCount: 45, remainingRequests: 105, ... }
-```
+### Meal-Specific (10 queries)
+- **Breakfast**: overnight oats, protein pancakes, protein smoothie, oatmeal, breakfast bowl, breakfast burrito
+- **Snacks**: protein balls, protein bar, energy bites, high protein snack
 
-#### Recipe Database Health
-- Monitor duplicate rates during seeding
-- Track validation failures
-- Audit tag distribution for balance
+### Cuisines (10 queries)
+Italian, Mexican, Asian, Indian, Thai, Korean, Mediterranean, Japanese, Greek, Lebanese
 
-#### Upgrade Triggers
-Consider upgrading Spoonacular plan when:
-- Daily API requests consistently exceed 150
-- You need real-time recipe updates
-- User experience requires more diverse recipes
+### Cooking Styles (7 queries)
+Slow cooker, air fryer, meal prep bowl, sheet pan dinner, one pot meal, grilled, baked
 
-### Alternative Approaches
+### Additional Categories (5 queries)
+Healthy options, muscle building, meal prep friendly, budget-friendly, vegetarian/vegan
 
-#### Option 1: User-Generated Recipes
-- **Cost**: Free
-- **Pros**: Community engagement, unique content
-- **Cons**: Requires content moderation, slower initial growth
+## Features
 
-#### Option 2: Open Recipe Databases
-- **Cost**: Free
-- **Sources**: RecipeDB, Food.com (API)
-- **Pros**: No rate limits, diverse content
-- **Cons**: Variable data quality, less structured
+### Rate Limiting
+- Respects Spoonacular's 150 requests/day free tier limit
+- Implements delays between requests
+- Tracks remaining quota and provides time estimates
 
-#### Option 3: Hybrid Approach
-- **Cost**: Low (reduced API usage)
-- **Strategy**: Seed core recipes, augment with user content
-- **Pros**: Best of both worlds, scalable
-- **Cons**: More complex implementation
+### Recipe Normalization
+- Extracts nutrition data (calories, protein, carbs, fat)
+- Normalizes ingredients and cooking steps
+- Adds relevant tags for categorization
+- Handles Spoonacular API response variations
+
+### Duplicate Detection
+- Checks for existing recipes by name
+- Skips duplicates to maintain data integrity
+- Reports duplicate statistics
+
+### Error Handling
+- Continues on individual recipe failures
+- Detailed error reporting
+- Configurable error tolerance
+
+## Cost Analysis
+
+### API Usage
+- **Initial Seeding**: 47 API calls (one per search query)
+- **With Instructions**: 97 API calls (47 search + 50 popular recipes with instructions)
+- **Cost**: $0 (within free tier limits)
+
+### Database Impact
+- **Target**: 300 recipes
+- **Current**: Check with `SELECT COUNT(*) FROM recipes`
+- **Growth**: ~2.5x increase in search diversity from previous version
+
+## Files
+
+- `seedRecipes.js`: Main seeding script
+- `spoonacularClient.js`: API client for Spoonacular
+- `recipeNormalizer.js`: Recipe data normalization
+- `rateLimiter.js`: API rate limiting
+- `COST_ANALYSIS.md`: Detailed cost and API usage analysis
 
 ## Troubleshooting
 
-### API Connection Issues
-If you experience timeouts or connection errors:
-1. Check your internet connection
-2. Verify SPOONACULAR_API_KEY is valid
-3. Try the test script: `node scripts/testSpoonacular.js`
+### Duplicate Recipes
+If you see high duplicate rates:
+- Run multiple seed runs on different days
+- Use `--continue-on-error` to handle API edge cases
+- The expanded query list reduces future duplication
 
-### Rate Limit Errors
+### Rate Limiting
 If you hit rate limits:
-1. Wait for daily reset (midnight UTC)
-2. Reduce batch size: `node scripts/seedRecipes.js 50 5`
-3. Use `--continue-on-error` to skip failed queries
+- Wait until the next day's quota resets
+- Reduce batch size: `node scripts/seedRecipes.js 300 5`
+- Use the rate limiter stats to estimate completion time
 
-### Database Errors
-If database operations fail:
-1. Verify DATABASE_URL in .env
-2. Check database connection
-3. Use `--dry-run` to validate before actual seeding
-
-## Maintenance Schedule
-
-### Weekly
-- Monitor recipe database size and diversity
-- Check tag distribution for balance
-- Review user feedback on recipe quality
-
-### Monthly
-- Consider adding new recipe categories
-- Update search queries for trending foods
-- Audit and remove low-quality recipes
-
-### Quarterly
-- Evaluate API usage patterns
-- Consider plan upgrades if needed
-- Review recipe performance metrics
+### API Key Issues
+- Ensure `SPOONACULAR_API_KEY` is set in `.env`
+- Verify your API key has access to the recipe endpoints
+- Check Spoonacular API status page for outages
 
 ## Future Enhancements
 
-### Planned Features
-- [ ] Incremental recipe updates (add new recipes weekly)
-- [ ] Recipe quality scoring system
-- [ ] Automatic duplicate detection with fuzzy matching
-- [ ] User preference-based recipe recommendations
-- [ ] Recipe popularity tracking
-
-### Scalability Improvements
-- [ ] Background job processing for large batches
-- [ ] Redis caching for popular recipes
-- [ ] CDN integration for recipe images
-- [ ] Recipe search optimization with full-text search
+- [ ] Add recipe instruction population script
+- [ ] Implement recipe image downloading
+- [ ] Add recipe rating/quality scoring
+- [ ] Implement automatic recipe categorization
+- [ ] Add recipe difficulty rating

@@ -12,11 +12,14 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags,
+      spoonacular_id,
+      source_url,
+      image_url,
     } = recipeData;
 
     const query = `
-      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags, spoonacular_id, source_url, image_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
     const values = [
@@ -29,6 +32,9 @@ class Recipe {
       fat_g || 0,
       prep_time_minutes || 0,
       JSON.stringify(tags || []),
+      spoonacular_id || null,
+      source_url || null,
+      image_url || null,
     ];
     const result = await pool.query(query, values);
     return result.rows[0];
@@ -57,6 +63,12 @@ class Recipe {
       values.push(filters.max_prep_time);
     }
 
+    if (filters.min_prep_time) {
+      paramCount++;
+      query += ` AND prep_time_minutes >= $${paramCount}`;
+      values.push(filters.min_prep_time);
+    }
+
     query += ' ORDER BY created_at DESC';
 
     if (filters.limit) {
@@ -67,6 +79,12 @@ class Recipe {
 
     const result = await pool.query(query, values);
     return result.rows;
+  }
+
+  static async count() {
+    const query = 'SELECT COUNT(*) as count FROM recipes';
+    const result = await pool.query(query);
+    return parseInt(result.rows[0].count);
   }
 
   static async update(id, recipeData) {
@@ -80,6 +98,9 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags,
+      spoonacular_id,
+      source_url,
+      image_url,
     } = recipeData;
 
     const query = `
@@ -94,8 +115,11 @@ class Recipe {
         fat_g = COALESCE($7, fat_g),
         prep_time_minutes = COALESCE($8, prep_time_minutes),
         tags = COALESCE($9, tags),
+        spoonacular_id = COALESCE($10, spoonacular_id),
+        source_url = COALESCE($11, source_url),
+        image_url = COALESCE($12, image_url),
         updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $10 
+      WHERE id = $13 
       RETURNING *
     `;
     const values = [
@@ -108,6 +132,9 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags ? JSON.stringify(tags) : null,
+      spoonacular_id,
+      source_url,
+      image_url,
       id,
     ];
     const result = await pool.query(query, values);

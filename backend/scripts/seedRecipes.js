@@ -18,7 +18,7 @@ class RecipeSeeder {
       requestDelay: options.requestDelay || 1000,
     });
 
-    this.targetCount = options.targetCount || 150; // Reduced to stay within API limits
+    this.targetCount = options.targetCount || 300; // Increased target for more recipe diversity
     this.batchSize = options.batchSize || 10; // Batch size for search results
     this.dryRun = options.dryRun || false;
     this.verbose = options.verbose || false;
@@ -38,38 +38,98 @@ class RecipeSeeder {
    */
   generateSearchQueries() {
     const queries = [
-      // High protein meals
+      // High protein meats
       { query: 'chicken breast', minProtein: 25, number: this.batchSize },
+      { query: 'turkey breast', minProtein: 25, number: this.batchSize },
       { query: 'salmon', minProtein: 20, number: this.batchSize },
+      { query: 'tuna', minProtein: 20, number: this.batchSize },
+      { query: 'lean beef', minProtein: 25, number: this.batchSize },
+      { query: 'shrimp', minProtein: 15, number: this.batchSize },
+
+      // High protein dairy/eggs
       { query: 'eggs', minProtein: 15, number: this.batchSize },
+      { query: 'egg white omelette', minProtein: 20, number: this.batchSize },
+      { query: 'cottage cheese', minProtein: 15, number: this.batchSize },
+      { query: 'greek yogurt', minProtein: 15, number: this.batchSize },
+
+      // Plant-based proteins
+      { query: 'tofu', minProtein: 10, number: this.batchSize },
+      { query: 'tofu scramble', minProtein: 10, number: this.batchSize },
+      { query: 'tempeh', minProtein: 15, number: this.batchSize },
+      { query: 'seitan', minProtein: 20, number: this.batchSize },
+      { query: 'edamame', minProtein: 10, number: this.batchSize },
+
+      // Breakfast-specific
+      { query: 'overnight oats', minProtein: 10, number: this.batchSize },
+      { query: 'protein pancakes', minProtein: 15, number: this.batchSize },
+      { query: 'protein smoothie', minProtein: 15, number: this.batchSize },
+      { query: 'oatmeal', minProtein: 8, number: this.batchSize },
+      { query: 'breakfast bowl', minProtein: 15, number: this.batchSize },
+      { query: 'breakfast burrito', minProtein: 15, number: this.batchSize },
+
+      // Snack-specific
+      { query: 'protein balls', minProtein: 10, number: this.batchSize },
+      { query: 'protein bar', minProtein: 15, number: this.batchSize },
+      { query: 'energy bites', minProtein: 8, number: this.batchSize },
+      { query: 'high protein snack', minProtein: 12, number: this.batchSize },
 
       // Budget-friendly
       { query: 'pasta', maxReadyTime: 30, number: this.batchSize },
       { query: 'rice', maxReadyTime: 30, number: this.batchSize },
       { query: 'beans', maxReadyTime: 45, number: this.batchSize },
+      { query: 'lentils', maxReadyTime: 45, number: this.batchSize },
+      { query: 'potatoes', maxReadyTime: 30, number: this.batchSize },
 
       // Vegetarian
       { query: 'vegetarian stir fry', diet: ['vegetarian'], number: this.batchSize },
-      { query: 'tofu', diet: ['vegetarian'], number: this.batchSize },
-      { query: 'lentils', diet: ['vegetarian'], number: this.batchSize },
+      { query: 'vegetarian curry', diet: ['vegetarian'], number: this.batchSize },
+      { query: 'vegan bowl', diet: ['vegan'], number: this.batchSize },
+      { query: 'vegetarian protein', diet: ['vegetarian'], minProtein: 15, number: this.batchSize },
 
       // Quick meals
       { query: 'quick dinner', maxReadyTime: 20, number: this.batchSize },
       { query: '15 minute meal', maxReadyTime: 15, number: this.batchSize },
+      { query: '20 minute dinner', maxReadyTime: 20, number: this.batchSize },
+      { query: 'fast breakfast', maxReadyTime: 15, number: this.batchSize },
 
       // Different cuisines
       { query: 'italian pasta', number: this.batchSize },
       { query: 'mexican chicken', number: this.batchSize },
       { query: 'asian stir fry', number: this.batchSize },
       { query: 'indian curry', number: this.batchSize },
+      { query: 'thai curry', number: this.batchSize },
+      { query: 'korean bbq', number: this.batchSize },
+      { query: 'mediterranean', number: this.batchSize },
+      { query: 'japanese teriyaki', number: this.batchSize },
+      { query: 'greek salad', number: this.batchSize },
+      { query: 'lebanese', number: this.batchSize },
+
+      // Cooking styles
+      { query: 'slow cooker', number: this.batchSize },
+      { query: 'air fryer', number: this.batchSize },
+      { query: 'meal prep bowl', number: this.batchSize },
+      { query: 'sheet pan dinner', number: this.batchSize },
+      { query: 'one pot meal', number: this.batchSize },
+      { query: 'grilled', number: this.batchSize },
+      { query: 'baked', number: this.batchSize },
 
       // Healthy options
       { query: 'healthy salad', number: this.batchSize },
       { query: 'grilled vegetables', number: this.batchSize },
+      { query: 'quinoa bowl', number: this.batchSize },
+      { query: 'rice bowl', number: this.batchSize },
+      { query: 'protein bowl', minProtein: 20, number: this.batchSize },
 
       // Muscle building
       { query: 'bodybuilding meal', minProtein: 30, number: this.batchSize },
       { query: 'post workout', minProtein: 25, number: this.batchSize },
+      { query: 'high protein dinner', minProtein: 25, number: this.batchSize },
+      { query: 'mass gainer', minProtein: 30, number: this.batchSize },
+
+      // Meal prep friendly
+      { query: 'meal prep chicken', number: this.batchSize },
+      { query: 'batch cooking', number: this.batchSize },
+      { query: 'freezer friendly', number: this.batchSize },
     ];
 
     return queries;
