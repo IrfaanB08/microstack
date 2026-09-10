@@ -12,14 +12,15 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags,
+      meal_type_tags,
       spoonacular_id,
       source_url,
       image_url,
     } = recipeData;
 
     const query = `
-      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags, spoonacular_id, source_url, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags, meal_type_tags, spoonacular_id, source_url, image_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
     const values = [
@@ -32,6 +33,7 @@ class Recipe {
       fat_g || 0,
       prep_time_minutes || 0,
       JSON.stringify(tags || []),
+      JSON.stringify(meal_type_tags || []),
       spoonacular_id || null,
       source_url || null,
       image_url || null,
@@ -55,6 +57,12 @@ class Recipe {
       paramCount++;
       query += ` AND tags @> $${paramCount}`;
       values.push(JSON.stringify(filters.tags));
+    }
+
+    if (filters.meal_type_tags && filters.meal_type_tags.length > 0) {
+      paramCount++;
+      query += ` AND meal_type_tags @> $${paramCount}`;
+      values.push(JSON.stringify(filters.meal_type_tags));
     }
 
     if (filters.max_prep_time) {
@@ -98,6 +106,7 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags,
+      meal_type_tags,
       spoonacular_id,
       source_url,
       image_url,
@@ -115,11 +124,12 @@ class Recipe {
         fat_g = COALESCE($7, fat_g),
         prep_time_minutes = COALESCE($8, prep_time_minutes),
         tags = COALESCE($9, tags),
-        spoonacular_id = COALESCE($10, spoonacular_id),
-        source_url = COALESCE($11, source_url),
-        image_url = COALESCE($12, image_url),
+        meal_type_tags = COALESCE($10, meal_type_tags),
+        spoonacular_id = COALESCE($11, spoonacular_id),
+        source_url = COALESCE($12, source_url),
+        image_url = COALESCE($13, image_url),
         updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $13 
+      WHERE id = $14 
       RETURNING *
     `;
     const values = [
@@ -132,6 +142,7 @@ class Recipe {
       fat_g,
       prep_time_minutes,
       tags ? JSON.stringify(tags) : null,
+      meal_type_tags ? JSON.stringify(meal_type_tags) : null,
       spoonacular_id,
       source_url,
       image_url,

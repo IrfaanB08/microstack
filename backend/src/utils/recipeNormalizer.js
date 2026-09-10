@@ -4,6 +4,81 @@
 
 class RecipeNormalizer {
   /**
+   * Generate meal type tags based on recipe name and characteristics
+   */
+  static generateMealTypeTags(recipe) {
+    const mealTypeTags = [];
+    const name = recipe.title.toLowerCase();
+
+    const breakfastKeywords = [
+      'oatmeal', 'oats', 'pancake', 'waffle', 'crepe', 'french toast',
+      'smoothie', 'cereal', 'granola', 'yogurt', 'parfait', 'toast',
+      'bagel', 'muffin', 'scone', 'breakfast', 'omelette', 'scrambled',
+      'fried egg', 'poached egg', 'overnight', 'breakfast bowl', 'burrito',
+      'porridge', 'biscuit', 'grits', 'quinoa breakfast',
+    ];
+
+    const lunchKeywords = [
+      'salad', 'sandwich', 'wrap', 'bowl', 'tacos', 'burrito',
+      'soup', 'stew', 'chili', 'rice bowl', 'grain bowl',
+      'lunch', 'midday', 'light', 'quick lunch',
+    ];
+
+    const dinnerKeywords = [
+      'curry', 'stir fry', 'roast', 'grilled', 'baked', 'steak',
+      'chicken', 'beef', 'pork', 'fish', 'seafood', 'pasta',
+      'casserole', 'lasagna', 'stuffed', 'dinner', 'main dish',
+      'dinner plate', 'protein', 'meal prep',
+    ];
+
+    const snackKeywords = [
+      'smoothie', 'energy', 'protein bar', 'trail mix', 'nuts',
+      'dip', 'hummus', 'chips', 'crackers', 'bites', 'balls',
+      'snack', 'finger food', 'appetizer', 'treat', 'dessert',
+    ];
+
+    // Check for breakfast keywords
+    if (breakfastKeywords.some(keyword => name.includes(keyword))) {
+      mealTypeTags.push('breakfast');
+    }
+
+    // Check for lunch keywords
+    if (lunchKeywords.some(keyword => name.includes(keyword))) {
+      mealTypeTags.push('lunch');
+    }
+
+    // Check for dinner keywords
+    if (dinnerKeywords.some(keyword => name.includes(keyword))) {
+      mealTypeTags.push('dinner');
+    }
+
+    // Check for snack keywords
+    if (snackKeywords.some(keyword => name.includes(keyword))) {
+      mealTypeTags.push('snack');
+    }
+
+    // Special cases for foods that fit multiple meal types
+    if (name.includes('smoothie') && !mealTypeTags.includes('breakfast')) {
+      mealTypeTags.push('breakfast', 'snack');
+    }
+
+    if (name.includes('oatmeal') && !mealTypeTags.includes('breakfast')) {
+      mealTypeTags.push('breakfast');
+    }
+
+    if (name.includes('salad') && !mealTypeTags.includes('lunch')) {
+      mealTypeTags.push('lunch', 'dinner');
+    }
+
+    // If no tags found, add generic 'any' tag
+    if (mealTypeTags.length === 0) {
+      mealTypeTags.push('any');
+    }
+
+    return mealTypeTags;
+  }
+
+  /**
    * Generate tags based on recipe properties
    */
   static generateTags(recipe) {
@@ -48,14 +123,6 @@ class RecipeNormalizer {
     // Health tags
     if (recipe.veryHealthy) tags.push('healthy');
     if (recipe.veryPopular) tags.push('popular');
-
-    // Meal type tags based on dish types
-    if (recipe.dishTypes) {
-      if (recipe.dishTypes.includes('breakfast')) tags.push('breakfast');
-      if (recipe.dishTypes.includes('lunch')) tags.push('lunch');
-      if (recipe.dishTypes.includes('dinner')) tags.push('dinner');
-      if (recipe.dishTypes.includes('snack')) tags.push('snack');
-    }
 
     return tags;
   }
@@ -174,6 +241,7 @@ class RecipeNormalizer {
   static normalize(spoonacularRecipe) {
     const macros = this.extractMacros(spoonacularRecipe.nutrition);
     const tags = this.generateTags(spoonacularRecipe);
+    const mealTypeTags = this.generateMealTypeTags(spoonacularRecipe);
     const ingredients = this.normalizeIngredients(spoonacularRecipe.extendedIngredients);
     const steps = this.normalizeSteps(spoonacularRecipe.analyzedInstructions, spoonacularRecipe.instructions);
 
@@ -184,6 +252,7 @@ class RecipeNormalizer {
       ...macros,
       prep_time_minutes: spoonacularRecipe.readyInMinutes || 0,
       tags,
+      meal_type_tags: mealTypeTags,
       // Store original Spoonacular ID for reference
       spoonacular_id: spoonacularRecipe.id,
       source_url: spoonacularRecipe.sourceUrl,

@@ -263,10 +263,13 @@ class MealPlanGenerator {
           }
         }
 
-        // Calculate target calories for this slot
+        // Calculate target calories for this slot with adaptive approach
         const dayCaloriesSoFar = Object.values(assignments[day] || {})
           .filter(r => r !== null)
           .reduce((sum, r) => {
+            if (r._isCombined && r._combinationRecipes) {
+              return sum + r._totalCalories;
+            }
             const multiplier = r._portionMultiplier || 1.0;
             return sum + ((parseFloat(r.calories) || 0) * multiplier);
           }, 0);
@@ -276,33 +279,50 @@ class MealPlanGenerator {
           !assignments[day][s] && mealsToPlan[day]?.[s]
         ).length;
         
+        // Use adaptive target based on remaining budget
         const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
 
         // Get suitable recipes for this slot
         const slotRecipes = this.getRecipesForSlot(recipes, slot, usedRecipes);
         
         if (slotRecipes.length > 0) {
-          // Calculate required portion multiplier to hit target
-          const selectedRecipe = this.selectRecipeForSlot(
-            slotRecipes, 
-            slot, 
-            macroTargets,
-            assignments,
-            day,
-            mealsToPlan
-          );
+          // Try to combine 2-3 recipes to hit target
+          const mealCombination = this.combineRecipesForSlot(slotRecipes, targetPerSlot, usedRecipes, slot);
           
-          // Calculate portion multiplier to hit target calories
-          const recipeCalories = parseFloat(selectedRecipe.calories) || 1;
-          const portionMultiplier = targetPerSlot / recipeCalories;
-          
-          // Store recipe with portion multiplier
-          assignments[day][slot] = {
-            ...selectedRecipe,
-            _portionMultiplier: Math.max(0.5, Math.min(3.0, portionMultiplier)), // Clamp between 0.5x and 3x
-          };
-          
-          usedRecipes.add(selectedRecipe.id);
+          if (mealCombination) {
+            // Mark all recipes in combination as used
+            mealCombination.recipes.forEach(r => usedRecipes.add(r.id));
+            
+            // Store as combined meal with realistic portion scaling
+            assignments[day][slot] = {
+              _isCombined: mealCombination.isCombined,
+              _combinationRecipes: mealCombination.recipes,
+              _totalCalories: mealCombination.totalCalories,
+              // For database compatibility, use first recipe as primary
+              ...mealCombination.recipes[0],
+            };
+          } else {
+            // Fallback to single recipe with realistic portion scaling (max 1.5x)
+            const selectedRecipe = this.selectRecipeForSlot(
+              slotRecipes, 
+              slot, 
+              macroTargets,
+              assignments,
+              day,
+              mealsToPlan
+            );
+            
+            // Calculate realistic portion multiplier (capped at 1.5x)
+            const recipeCalories = parseFloat(selectedRecipe.calories) || 1;
+            const portionMultiplier = Math.min(1.5, Math.max(1.0, targetPerSlot / recipeCalories));
+            
+            assignments[day][slot] = {
+              ...selectedRecipe,
+              _portionMultiplier: portionMultiplier,
+            };
+            
+            usedRecipes.add(selectedRecipe.id);
+          }
         } else {
           assignments[day][slot] = null;
         }
@@ -350,13 +370,21 @@ class MealPlanGenerator {
     const slotSpecificRecipes = recipes.filter(recipe => {
       if (usedRecipes.has(recipe.id)) return false;
       
-      const tags = recipe.tags || [];
+      const mealTypeTags = recipe.meal_type_tags || [];
       
       // Prefer recipes tagged for this meal type
-      if (tags.includes(slot)) return true;
+      if (mealTypeTags.includes(slot)) return true;
       
-      // Allow any recipe if no specific tag
-      return true;
+      // Allow recipes tagged as 'any' for any slot
+      if (mealTypeTags.includes('any')) return true;
+      
+      // For snack slot, be more restrictive (only snack-tagged or any-tagged)
+      if (slot === 'snack') {
+        return mealTypeTags.includes('snack') || mealTypeTags.includes('any');
+      }
+      
+      // For other slots, allow recipes without specific meal type tags
+      return mealTypeTags.length === 0;
     });
 
     return slotSpecificRecipes;
@@ -369,14 +397,19 @@ class MealPlanGenerator {
     // Calculate remaining calorie budget for the day
     const dayCaloriesSoFar = Object.values(currentAssignments[currentDay] || {})
       .filter(r => r !== null)
-      .reduce((sum, r) => sum + (parseFloat(r.calories) || 0), 0);
+      .reduce((sum, r) => {
+        if (r._isCombined && r._combinationRecipes) {
+          return sum + r._totalCalories;
+        }
+        const multiplier = r._portionMultiplier || 1.0;
+        return sum + ((parseFloat(r.calories) || 0) * multiplier);
+      }, 0);
     
     const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
     const remainingSlots = this.mealSlots.filter(s => 
       !currentAssignments[currentDay][s] && mealsToPlan[currentDay]?.[s]
     ).length;
     
-    // Target calories per remaining slot
     const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
 
     // Find recipes closest to target calories
@@ -402,81 +435,120 @@ class MealPlanGenerator {
   /**
    * Combine multiple recipes to hit calorie targets
    */
-  combineRecipesForSlot(recipes, targetCalories, usedRecipes) {
-    // Allow recipe reuse if we're running low on options
-    const availableRecipes = recipes.length > 20 ? recipes.filter(r => !usedRecipes.has(r.id)) : recipes;
+  combineRecipesForSlot(recipes, targetCalories, usedRecipes, slot) {
+    // Allow more recipe reuse to avoid running out
+    const availableRecipes = recipes.length > 30 ? recipes.filter(r => !usedRecipes.has(r.id)) : recipes;
     
-    // Try to find a single recipe close to target first
-    const singleScores = availableRecipes.map(r => ({
-      recipe: r,
-      diff: Math.abs(parseFloat(r.calories) - targetCalories),
-    })).sort((a, b) => a.diff - b.diff);
+    if (availableRecipes.length === 0) return null;
 
-    // If a single recipe is within 20% of target, use it
-    if (singleScores.length > 0 && singleScores[0].diff < targetCalories * 0.2) {
-      return {
-        recipes: [singleScores[0].recipe],
-        totalCalories: parseFloat(singleScores[0].recipe.calories),
-        isCombined: false,
-      };
+    // For snack slot, limit to 1-2 items and lower calorie ceiling
+    if (slot === 'snack') {
+      const snackCeiling = 600; // Max 600 calories for snacks
+      const adjustedTarget = Math.min(targetCalories, snackCeiling);
+      
+      // Try combinations of 2 recipes only
+      for (let i = 0; i < availableRecipes.length; i++) {
+        for (let j = i + 1; j < availableRecipes.length; j++) {
+          const combo = [availableRecipes[i], availableRecipes[j]];
+          const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
+          
+          // For snacks, accept anything within 200-600 calories
+          if (totalCalories >= 200 && totalCalories <= snackCeiling) {
+            return {
+              recipes: combo,
+              totalCalories: totalCalories,
+              isCombined: true,
+            };
+          }
+        }
+      }
+      
+      // Fallback to single recipe
+      const bestSingle = availableRecipes.reduce((best, r) => {
+        const calories = parseFloat(r.calories);
+        const diff = Math.abs(calories - adjustedTarget);
+        return diff < best.diff ? { recipe: r, diff } : best;
+      }, { recipe: null, diff: Infinity });
+      
+      if (bestSingle.recipe) {
+        return {
+          recipes: [bestSingle.recipe],
+          totalCalories: parseFloat(bestSingle.recipe.calories),
+          isCombined: false,
+        };
+      }
+      
+      return null;
     }
 
-    // Otherwise, try to combine 2-3 recipes
-    const bestCombination = this.findBestRecipeCombination(availableRecipes, targetCalories);
-    
-    if (bestCombination) {
-      return {
-        recipes: bestCombination,
-        totalCalories: bestCombination.reduce((sum, r) => sum + parseFloat(r.calories), 0),
-        isCombined: true,
-      };
-    }
+    // For main meals (breakfast, lunch, dinner), find the best combination overall
+    let bestCombination = null;
+    let bestDiff = Infinity;
 
-    // Fallback to single best recipe
-    if (singleScores.length > 0) {
-      return {
-        recipes: [singleScores[0].recipe],
-        totalCalories: parseFloat(singleScores[0].recipe.calories),
-        isCombined: false,
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * Find best combination of recipes to hit target calories
-   */
-  findBestRecipeCombination(recipes, targetCalories) {
     // Try combinations of 2 recipes
-    for (let i = 0; i < recipes.length; i++) {
-      for (let j = i + 1; j < recipes.length; j++) {
-        const combo = [recipes[i], recipes[j]];
+    for (let i = 0; i < availableRecipes.length; i++) {
+      for (let j = i + 1; j < availableRecipes.length; j++) {
+        const combo = [availableRecipes[i], availableRecipes[j]];
         const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
         const diff = Math.abs(totalCalories - targetCalories);
         
-        if (diff < targetCalories * 0.25) { // Within 25% of target
-          return combo;
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCombination = {
+            recipes: combo,
+            totalCalories: totalCalories,
+            isCombined: true,
+          };
         }
       }
     }
 
     // Try combinations of 3 recipes
-    for (let i = 0; i < recipes.length; i++) {
-      for (let j = i + 1; j < recipes.length; j++) {
-        for (let k = j + 1; k < recipes.length; k++) {
-          const combo = [recipes[i], recipes[j], recipes[k]];
+    for (let i = 0; i < availableRecipes.length; i++) {
+      for (let j = i + 1; j < availableRecipes.length; j++) {
+        for (let k = j + 1; k < availableRecipes.length; k++) {
+          const combo = [availableRecipes[i], availableRecipes[j], availableRecipes[k]];
           const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
           const diff = Math.abs(totalCalories - targetCalories);
           
-          if (diff < targetCalories * 0.2) { // Within 20% of target
-            return combo;
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestCombination = {
+              recipes: combo,
+              totalCalories: totalCalories,
+              isCombined: true,
+            };
           }
         }
       }
     }
 
-    return null;
+    // For larger targets, try combinations of 4 recipes
+    if (targetCalories > 800) {
+      for (let i = 0; i < availableRecipes.length; i++) {
+        for (let j = i + 1; j < availableRecipes.length; j++) {
+          for (let k = j + 1; k < availableRecipes.length; k++) {
+            for (let l = k + 1; l < availableRecipes.length; l++) {
+              const combo = [availableRecipes[i], availableRecipes[j], availableRecipes[k], availableRecipes[l]];
+              const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
+              const diff = Math.abs(totalCalories - targetCalories);
+              
+              if (diff < bestDiff) {
+                bestDiff = diff;
+                bestCombination = {
+                  recipes: combo,
+                  totalCalories: totalCalories,
+                  isCombined: true,
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Return the best combination found (even if not perfect)
+    return bestCombination;
   }
 
   /**
@@ -496,13 +568,27 @@ class MealPlanGenerator {
       for (const slot of this.mealSlots) {
         const meal = assignments[day][slot];
         if (meal) {
-          // Handle portion multipliers
-          const multiplier = meal._portionMultiplier || 1.0;
-          
-          dailyMacros[day].calories += (parseFloat(meal.calories) || 0) * multiplier;
-          dailyMacros[day].protein_g += (parseFloat(meal.protein_g) || 0) * multiplier;
-          dailyMacros[day].carbs_g += (parseFloat(meal.carbs_g) || 0) * multiplier;
-          dailyMacros[day].fat_g += (parseFloat(meal.fat_g) || 0) * multiplier;
+          // Handle combined meals
+          if (meal._isCombined && meal._combinationRecipes) {
+            const combinedMacros = meal._combinationRecipes.reduce((sum, r) => ({
+              calories: sum.calories + (parseFloat(r.calories) || 0),
+              protein_g: sum.protein_g + (parseFloat(r.protein_g) || 0),
+              carbs_g: sum.carbs_g + (parseFloat(r.carbs_g) || 0),
+              fat_g: sum.fat_g + (parseFloat(r.fat_g) || 0),
+            }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+
+            dailyMacros[day].calories += combinedMacros.calories;
+            dailyMacros[day].protein_g += combinedMacros.protein_g;
+            dailyMacros[day].carbs_g += combinedMacros.carbs_g;
+            dailyMacros[day].fat_g += combinedMacros.fat_g;
+          } else {
+            // Single recipe with portion multiplier
+            const multiplier = meal._portionMultiplier || 1.0;
+            dailyMacros[day].calories += (parseFloat(meal.calories) || 0) * multiplier;
+            dailyMacros[day].protein_g += (parseFloat(meal.protein_g) || 0) * multiplier;
+            dailyMacros[day].carbs_g += (parseFloat(meal.carbs_g) || 0) * multiplier;
+            dailyMacros[day].fat_g += (parseFloat(meal.fat_g) || 0) * multiplier;
+          }
         }
       }
     }
