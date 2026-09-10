@@ -25,6 +25,9 @@ app.use('/api/macros', require('./src/routes/macros'));
 // Meal plan routes
 app.use('/api/meal-plans', require('./src/routes/mealPlans'));
 
+// Shopping list routes
+app.use('/api/shopping-lists', require('./src/routes/shoppingLists'));
+
 // Placeholder for future routes
 // app.use('/api/users', require('./src/routes/users'));
 

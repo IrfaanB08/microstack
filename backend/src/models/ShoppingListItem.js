@@ -1,4 +1,6 @@
 const pool = require('../config/database');
+const PlannedMeal = require('./PlannedMeal');
+const GroceryCategorizer = require('../utils/groceryCategorizer');
 
 class ShoppingListItem {
   static async create({ meal_plan_id, ingredient_name, quantity, unit, grocery_aisle_category }) {
@@ -70,22 +72,100 @@ class ShoppingListItem {
     return result.rows;
   }
 
+  /**
+   * Aggregate ingredients from every planned meal in a meal plan and
+   * (re)generate the shopping list items for it. Existing items (and any
+   * manual checked-off state) are replaced.
+   */
   static async regenerateForMealPlan(mealPlanId) {
-    // This method would aggregate ingredients from all planned meals
-    // and create/update shopping list items
-    // Implementation would be added when meal plan generation is built
+    // Clear out the previous list
+    await pool.query('DELETE FROM shopping_list_items WHERE meal_plan_id = $1', [mealPlanId]);
+
+    const plannedMeals = await PlannedMeal.findByMealPlanId(mealPlanId);
+    const aggregated = this.aggregateIngredients(plannedMeals);
+
+    if (aggregated.length === 0) {
+      return [];
+    }
+
+    const values = [];
+    const rows = [];
+    let paramCount = 0;
+
+    for (const item of aggregated) {
+      const category = GroceryCategorizer.categorize(item.ingredient_name);
+      rows.push(
+        `($${++paramCount}, $${++paramCount}, $${++paramCount}, $${++paramCount}, $${++paramCount})`
+      );
+      values.push(mealPlanId, item.ingredient_name, item.quantity, item.unit, category);
+    }
+
     const query = `
-      DELETE FROM shopping_list_items WHERE meal_plan_id = $1
+      INSERT INTO shopping_list_items (meal_plan_id, ingredient_name, quantity, unit, grocery_aisle_category)
+      VALUES ${rows.join(', ')}
+      RETURNING *
     `;
-    await pool.query(query, [mealPlanId]);
-    
-    // Future implementation would:
-    // 1. Get all planned meals for the meal plan
-    // 2. Extract and aggregate ingredients from recipes
-    // 3. Create shopping list items with combined quantities
-    // 4. Categorize by grocery aisle
-    
-    return [];
+    const result = await pool.query(query, values);
+    return result.rows;
+  }
+
+  /**
+   * Combine ingredients across all recipes in a set of planned meals,
+   * summing quantities for ingredients that share the same name and unit.
+   */
+  static aggregateIngredients(plannedMeals) {
+    const grouped = new Map();
+
+    for (const plannedMeal of plannedMeals) {
+      const ingredients = plannedMeal.ingredients || [];
+
+      for (const ingredient of ingredients) {
+        const name = (ingredient.name || ingredient.original || '').toString().trim();
+        if (!name) continue;
+
+        const unit = (ingredient.unit || '').toString().trim();
+        const key = `${name.toLowerCase()}::${unit.toLowerCase()}`;
+        const numericQuantity = parseFloat(ingredient.quantity);
+        const hasNumericQuantity = !Number.isNaN(numericQuantity);
+
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            ingredient_name: name,
+            unit,
+            numericTotal: hasNumericQuantity ? numericQuantity : 0,
+            hasNumeric: hasNumericQuantity,
+            nonNumericParts: hasNumericQuantity ? [] : [String(ingredient.quantity || '').trim()].filter(Boolean),
+          });
+        } else {
+          const entry = grouped.get(key);
+          if (hasNumericQuantity) {
+            entry.numericTotal += numericQuantity;
+            entry.hasNumeric = true;
+          } else {
+            const part = String(ingredient.quantity || '').trim();
+            if (part && !entry.nonNumericParts.includes(part)) entry.nonNumericParts.push(part);
+          }
+        }
+      }
+    }
+
+    return Array.from(grouped.values()).map((entry) => {
+      let quantity;
+      if (entry.hasNumeric && entry.nonNumericParts.length === 0) {
+        // Trim trailing zeros (e.g. 2.50 -> 2.5, 3.00 -> 3)
+        quantity = String(Math.round(entry.numericTotal * 100) / 100);
+      } else if (entry.hasNumeric) {
+        quantity = [String(Math.round(entry.numericTotal * 100) / 100), ...entry.nonNumericParts].join(' + ');
+      } else {
+        quantity = entry.nonNumericParts.join(' + ') || null;
+      }
+
+      return {
+        ingredient_name: entry.ingredient_name,
+        quantity,
+        unit: entry.unit || null,
+      };
+    });
   }
 }
 

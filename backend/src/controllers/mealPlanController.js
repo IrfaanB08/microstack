@@ -2,6 +2,7 @@ const MealPlanGenerator = require('../utils/mealPlanGenerator');
 const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
 const User = require('../models/User');
+const ShoppingListItem = require('../models/ShoppingListItem');
 
 const mealPlanController = {
   /**
@@ -26,25 +27,34 @@ const mealPlanController = {
       }
 
       const generator = new MealPlanGenerator();
-      const options = {
-        weekStartDate: week_start_date,
-        regenerate: regenerate || false,
-      };
 
-      // Check if meal plan already exists
-      if (week_start_date) {
-        const existingPlan = await MealPlan.findByUserAndWeek(userId, week_start_date);
-        if (existingPlan && !regenerate) {
-          return res.status(409).json({
-            error: 'Meal plan already exists for this week',
-            mealPlan: existingPlan,
-          });
-        }
-        options.existingMealPlan = existingPlan;
+      // Resolve the week this plan is for, using the same default (current
+      // week's Sunday) the generator itself would fall back to, so the
+      // duplicate check below always looks at the right week - whether or
+      // not the caller explicitly passed one.
+      const effectiveWeekStartDate = (week_start_date || generator.getCurrentWeekStart()).split('T')[0];
+
+      // Check if a meal plan already exists for that week
+      const existingPlan = await MealPlan.findByUserAndWeek(userId, effectiveWeekStartDate);
+      if (existingPlan && !regenerate) {
+        return res.status(409).json({
+          error: 'You already have a meal plan for this week',
+          message: 'Pass "regenerate: true" if you want to replace it.',
+          mealPlan: existingPlan,
+        });
       }
+
+      const options = {
+        weekStartDate: effectiveWeekStartDate,
+        regenerate: regenerate || false,
+        existingMealPlan: existingPlan || null,
+      };
 
       // Generate meal plan
       const result = await generator.generateWeeklyPlan(user, options);
+
+      // Keep the shopping list in sync with the freshly planned meals
+      await ShoppingListItem.regenerateForMealPlan(result.mealPlan.id);
 
       res.json({
         success: true,
@@ -238,6 +248,9 @@ const mealPlanController = {
       const generator = new MealPlanGenerator();
       const result = await generator.swapMeal(meal_plan_id, day, slot);
 
+      // Keep the shopping list in sync with the updated meal
+      await ShoppingListItem.regenerateForMealPlan(meal_plan_id);
+
       res.json({
         success: true,
         message: 'Meal swapped successfully',
@@ -285,6 +298,9 @@ const mealPlanController = {
 
       const generator = new MealPlanGenerator();
       const result = await generator.regenerateDay(meal_plan_id, day);
+
+      // Keep the shopping list in sync with the regenerated day's meals
+      await ShoppingListItem.regenerateForMealPlan(meal_plan_id);
 
       res.json({
         success: true,
