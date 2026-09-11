@@ -12,6 +12,8 @@
     "seed:recipes": "node scripts/seedRecipes.js",
     "seed:recipes:dry": "node scripts/seedRecipes.js --dry-run --verbose 10",
     "seed:recipes:test": "node scripts/testSpoonacular.js",
+    "backfill:servings": "node scripts/backfillRecipeServings.js",
+    "backfill:servings:dry": "node scripts/backfillRecipeServings.js --dry-run --verbose",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

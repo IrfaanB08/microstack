@@ -1,3 +1,5 @@
+const Recipe = require('../models/Recipe');
+
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MEAL_SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_SLOT_LABELS = {
@@ -123,12 +125,17 @@ class BatchPrepGenerator {
    * cooking steps, and portioning/storage steps.
    */
   buildRecipePrepCard(recipe, servings, occurrences, isBatch) {
-    const ingredients = (recipe.ingredients || []).map((ingredient) => {
-      const quantity = isBatch && servings > 1
-        ? this.scaleQuantity(ingredient.quantity, servings)
-        : ingredient.quantity;
-      return this.formatIngredientLine(ingredient.name, quantity, ingredient.unit);
-    });
+    // Recipe ingredient quantities are for whatever serving count the
+    // recipe originally yields (e.g. a chili that serves 6), not for one
+    // serving. Scale down to a single serving first, then up by however
+    // many servings we actually need this week - otherwise "servings" ends
+    // up multiplying the wrong base amount.
+    const recipeYield = Recipe.resolveServings(recipe);
+    const scaleFactor = servings / recipeYield;
+
+    const ingredients = (recipe.ingredients || []).map((ingredient) =>
+      this.formatIngredientLine(ingredient.name, this.scaleQuantity(ingredient.quantity, scaleFactor), ingredient.unit)
+    );
 
     const steps = [
       ...this.buildCookingSteps(recipe, servings, isBatch),
@@ -154,9 +161,14 @@ class BatchPrepGenerator {
 
   buildCookingSteps(recipe, servings, isBatch) {
     const steps = [];
+    const recipeYield = Recipe.resolveServings(recipe);
 
-    if (isBatch && servings > 1) {
-      steps.push(`Scale the ingredients above by ${servings}x - you're making ${servings} servings in this one batch.`);
+    if (isBatch && servings !== recipeYield) {
+      const scaleFactor = Math.round((servings / recipeYield) * 100) / 100;
+      steps.push(
+        `This recipe normally makes ${recipeYield} serving${recipeYield === 1 ? '' : 's'} - the ingredient amounts ` +
+        `above are already scaled ${scaleFactor}x to make ${servings} servings for this batch.`
+      );
     }
 
     const recipeSteps = recipe.steps || [];
@@ -196,7 +208,7 @@ class BatchPrepGenerator {
     return steps;
   }
 
-  /** Multiply a recipe's stored ingredient quantity for a batch of N servings. */
+  /** Multiply a numeric ingredient quantity by an arbitrary scale factor. */
   scaleQuantity(quantity, multiplier) {
     const numericQuantity = parseFloat(quantity);
     if (Number.isNaN(numericQuantity)) return quantity;

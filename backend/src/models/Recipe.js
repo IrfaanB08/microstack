@@ -16,11 +16,12 @@ class Recipe {
       spoonacular_id,
       source_url,
       image_url,
+      servings,
     } = recipeData;
 
     const query = `
-      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags, meal_type_tags, spoonacular_id, source_url, image_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      INSERT INTO recipes (name, ingredients, steps, calories, protein_g, carbs_g, fat_g, prep_time_minutes, tags, meal_type_tags, spoonacular_id, source_url, image_url, servings)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *
     `;
     const values = [
@@ -37,6 +38,7 @@ class Recipe {
       spoonacular_id || null,
       source_url || null,
       image_url || null,
+      servings || null,
     ];
     const result = await pool.query(query, values);
     return result.rows[0];
@@ -110,11 +112,12 @@ class Recipe {
       spoonacular_id,
       source_url,
       image_url,
+      servings,
     } = recipeData;
 
     const query = `
-      UPDATE recipes 
-      SET 
+      UPDATE recipes
+      SET
         name = COALESCE($1, name),
         ingredients = COALESCE($2, ingredients),
         steps = COALESCE($3, steps),
@@ -128,8 +131,9 @@ class Recipe {
         spoonacular_id = COALESCE($11, spoonacular_id),
         source_url = COALESCE($12, source_url),
         image_url = COALESCE($13, image_url),
-        updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $14 
+        servings = COALESCE($14, servings),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $15
       RETURNING *
     `;
     const values = [
@@ -146,6 +150,7 @@ class Recipe {
       spoonacular_id,
       source_url,
       image_url,
+      servings,
       id,
     ];
     const result = await pool.query(query, values);
@@ -156,6 +161,18 @@ class Recipe {
     const query = 'DELETE FROM recipes WHERE id = $1 RETURNING *';
     const result = await pool.query(query, [id]);
     return result.rows[0];
+  }
+
+  /**
+   * Resolve how many servings a recipe's stored ingredient quantities are
+   * for. Defaults to 1 when unknown (not yet backfilled, or created before
+   * the `servings` column existed), so ingredient-scaling code always has
+   * a safe divisor and never treats a whole recipe's ingredient list as a
+   * single serving's worth by accident.
+   */
+  static resolveServings(recipeLike) {
+    const servings = parseInt(recipeLike?.servings, 10);
+    return Number.isFinite(servings) && servings > 0 ? servings : 1;
   }
 }
 

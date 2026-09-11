@@ -20,7 +20,7 @@ class PlannedMeal {
 
   static async findByMealPlanId(mealPlanId) {
     const query = `
-      SELECT pm.*, r.name as recipe_name, r.ingredients, r.steps, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.prep_time_minutes, r.tags
+      SELECT pm.*, r.name as recipe_name, r.ingredients, r.steps, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.prep_time_minutes, r.tags, r.servings
       FROM planned_meals pm
       JOIN recipes r ON pm.recipe_id = r.id
       WHERE pm.meal_plan_id = $1
@@ -32,7 +32,7 @@ class PlannedMeal {
 
   static async findByMealPlanIdAndDay(mealPlanId, dayOfWeek) {
     const query = `
-      SELECT pm.*, r.name as recipe_name, r.ingredients, r.steps, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.prep_time_minutes, r.tags
+      SELECT pm.*, r.name as recipe_name, r.ingredients, r.steps, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.prep_time_minutes, r.tags, r.servings
       FROM planned_meals pm
       JOIN recipes r ON pm.recipe_id = r.id
       WHERE pm.meal_plan_id = $1 AND pm.day_of_week = $2

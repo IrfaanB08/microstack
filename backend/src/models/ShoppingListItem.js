@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const PlannedMeal = require('./PlannedMeal');
+const Recipe = require('./Recipe');
 const GroceryCategorizer = require('../utils/groceryCategorizer');
 
 class ShoppingListItem {
@@ -112,12 +113,20 @@ class ShoppingListItem {
   /**
    * Combine ingredients across all recipes in a set of planned meals,
    * summing quantities for ingredients that share the same name and unit.
+   *
+   * Each recipe's stored ingredient quantities are for whatever serving
+   * count the recipe originally yields (e.g. a chili that serves 6), not
+   * for the single serving a planned meal actually represents. Every
+   * numeric quantity is divided by the recipe's servings first so what
+   * gets summed - and ultimately shopped for - is a true per-serving
+   * amount for each occurrence in the plan.
    */
   static aggregateIngredients(plannedMeals) {
     const grouped = new Map();
 
     for (const plannedMeal of plannedMeals) {
       const ingredients = plannedMeal.ingredients || [];
+      const recipeYield = Recipe.resolveServings(plannedMeal);
 
       for (const ingredient of ingredients) {
         const name = (ingredient.name || ingredient.original || '').toString().trim();
@@ -125,8 +134,9 @@ class ShoppingListItem {
 
         const unit = (ingredient.unit || '').toString().trim();
         const key = `${name.toLowerCase()}::${unit.toLowerCase()}`;
-        const numericQuantity = parseFloat(ingredient.quantity);
-        const hasNumericQuantity = !Number.isNaN(numericQuantity);
+        const rawQuantity = parseFloat(ingredient.quantity);
+        const hasNumericQuantity = !Number.isNaN(rawQuantity);
+        const numericQuantity = hasNumericQuantity ? rawQuantity / recipeYield : rawQuantity;
 
         if (!grouped.has(key)) {
           grouped.set(key, {

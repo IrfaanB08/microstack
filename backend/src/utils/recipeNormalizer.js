@@ -251,6 +251,9 @@ class RecipeNormalizer {
       steps,
       ...macros,
       prep_time_minutes: spoonacularRecipe.readyInMinutes || 0,
+      // How many servings the ingredient list above actually makes - needed
+      // to scale ingredient quantities down to a single serving later.
+      servings: spoonacularRecipe.servings || null,
       tags,
       meal_type_tags: mealTypeTags,
       // Store original Spoonacular ID for reference
