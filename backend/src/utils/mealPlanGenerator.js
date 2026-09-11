@@ -38,7 +38,8 @@ class MealPlanGenerator {
         suitableRecipes,
         macroTargets,
         mealsToPlan,
-        existingMealPlan
+        existingMealPlan,
+        user.prep_time_preference
       );
 
       // Calculate daily macro totals
@@ -231,9 +232,18 @@ class MealPlanGenerator {
   }
 
   /**
-   * Assign recipes to meal slots
+   * Assign recipes to meal slots.
+   *
+   * Daily-preference users get the variety-maximizing behavior below (a
+   * different recipe for nearly every slot). Batch-preference users are
+   * routed to assignMealsToSlotsBatch instead, which deliberately repeats
+   * a small pool of recipes so there's something worth batch-cooking.
    */
-  async assignMealsToSlots(recipes, macroTargets, mealsToPlan, existingMealPlan = null) {
+  async assignMealsToSlots(recipes, macroTargets, mealsToPlan, existingMealPlan = null, prepTimePreference = 'daily') {
+    if (prepTimePreference === 'batch') {
+      return this.assignMealsToSlotsBatch(recipes, macroTargets, mealsToPlan);
+    }
+
     const assignments = {};
     const usedRecipes = new Set();
 
@@ -330,6 +340,92 @@ class MealPlanGenerator {
     }
 
     return assignments;
+  }
+
+  /**
+   * Assign recipes for a batch-preference week: instead of a different
+   * recipe per slot, pick one "anchor" recipe per meal-slot type
+   * (breakfast/lunch/dinner/snack) and repeat it on every day that slot is
+   * planned. This is what makes batch cooking worthwhile - the same
+   * recipe, cooked once in bulk, covers most/all of the week for that
+   * meal, with portions scaled to approximate each day's remaining
+   * calorie budget (same portion-scaling approach as the single-recipe
+   * fallback above, capped at 1.5x).
+   */
+  assignMealsToSlotsBatch(recipes, macroTargets, mealsToPlan) {
+    const assignments = {};
+    const anchorPool = this.selectBatchRecipePool(recipes, macroTargets, mealsToPlan);
+
+    for (const day of this.daysOfWeek) {
+      assignments[day] = {};
+
+      for (const slot of this.mealSlots) {
+        if (!mealsToPlan[day] || !mealsToPlan[day][slot]) {
+          assignments[day][slot] = null;
+          continue;
+        }
+
+        const anchorRecipe = anchorPool[slot];
+        if (!anchorRecipe) {
+          assignments[day][slot] = null;
+          continue;
+        }
+
+        const dayCaloriesSoFar = Object.values(assignments[day])
+          .filter((r) => r !== null)
+          .reduce((sum, r) => sum + (parseFloat(r.calories) || 0) * (r._portionMultiplier || 1.0), 0);
+
+        const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
+        const remainingSlots = this.mealSlots.filter(
+          (s) => !assignments[day][s] && mealsToPlan[day]?.[s]
+        ).length;
+        const targetForSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
+
+        const recipeCalories = parseFloat(anchorRecipe.calories) || 1;
+        const portionMultiplier = Math.min(1.5, Math.max(1.0, targetForSlot / recipeCalories));
+
+        assignments[day][slot] = {
+          ...anchorRecipe,
+          _portionMultiplier: portionMultiplier,
+        };
+      }
+    }
+
+    return assignments;
+  }
+
+  /**
+   * Choose one anchor recipe per meal-slot type for a batch-preference
+   * week. Each slot type that's actually needed this week (per
+   * mealsToPlan / eating-out frequency) gets the suitable recipe whose
+   * calories land closest to an even share of the daily calorie target -
+   * this typically yields 3-4 unique recipes for the whole week, each one
+   * repeated across every day that slot is planned.
+   */
+  selectBatchRecipePool(recipes, macroTargets, mealsToPlan) {
+    const pool = {};
+    const usedRecipeIds = new Set();
+    const approxTargetPerSlot = macroTargets.calories / this.mealSlots.length;
+
+    for (const slot of this.mealSlots) {
+      const slotNeeded = this.daysOfWeek.some((day) => mealsToPlan[day]?.[slot]);
+      if (!slotNeeded) continue;
+
+      const candidates = this.getRecipesForSlot(recipes, slot, usedRecipeIds);
+      if (candidates.length === 0) continue;
+
+      const best = candidates.reduce((best, recipe) => {
+        const diff = Math.abs((parseFloat(recipe.calories) || 0) - approxTargetPerSlot);
+        return diff < best.diff ? { recipe, diff } : best;
+      }, { recipe: null, diff: Infinity });
+
+      if (best.recipe) {
+        pool[slot] = best.recipe;
+        usedRecipeIds.add(best.recipe.id);
+      }
+    }
+
+    return pool;
   }
 
   /**

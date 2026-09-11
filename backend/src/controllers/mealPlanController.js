@@ -1,4 +1,5 @@
 const MealPlanGenerator = require('../utils/mealPlanGenerator');
+const BatchPrepGenerator = require('../utils/batchPrepGenerator');
 const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
 const User = require('../models/User');
@@ -345,6 +346,51 @@ const mealPlanController = {
       console.error('Error deleting meal plan:', error);
       res.status(500).json({
         error: 'Failed to delete meal plan',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * Get batch-prep (or daily-cooking) instructions for a meal plan.
+   * Groups meals into prep sessions based on the user's batch vs daily
+   * preference and generates deterministic, template-based cooking and
+   * portioning steps - no AI generation involved.
+   */
+  getPrepInstructions: async (req, res) => {
+    try {
+      const userId = req.user.userId;
+      const { meal_plan_id } = req.params;
+
+      // Verify meal plan belongs to user
+      const mealPlan = await MealPlan.findById(meal_plan_id);
+      if (!mealPlan) {
+        return res.status(404).json({ error: 'Meal plan not found' });
+      }
+
+      if (mealPlan.user_id !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const plannedMeals = await PlannedMeal.findByMealPlanId(meal_plan_id);
+
+      const generator = new BatchPrepGenerator();
+      const prepInstructions = generator.generate(user, plannedMeals);
+
+      res.json({
+        success: true,
+        mealPlanId: meal_plan_id,
+        ...prepInstructions,
+      });
+    } catch (error) {
+      console.error('Error generating prep instructions:', error);
+      res.status(500).json({
+        error: 'Failed to generate prep instructions',
         message: error.message,
       });
     }

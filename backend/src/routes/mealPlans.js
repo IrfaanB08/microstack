@@ -21,6 +21,9 @@ router.put('/:meal_plan_id/swap', mealPlanController.swapMeal);
 // Regenerate a single day's meals
 router.put('/:meal_plan_id/regenerate-day', mealPlanController.regenerateDay);
 
+// Get batch-prep (or daily-cooking) instructions for a meal plan
+router.get('/:meal_plan_id/prep-instructions', mealPlanController.getPrepInstructions);
+
 // Delete a meal plan
 router.delete('/:meal_plan_id', mealPlanController.deleteMealPlan);
 
