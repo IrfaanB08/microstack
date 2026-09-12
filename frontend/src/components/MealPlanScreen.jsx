@@ -7,6 +7,8 @@ import './MealPlanScreen.css';
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
 const MEAL_SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
+const DAY_TYPE_LABELS = { training: '🏋️ Training day', rest: '😴 Rest day' };
+const WORKOUT_TAG_LABELS = { 'pre-workout': 'Pre-workout', 'post-workout': 'Post-workout' };
 
 function formatMacro(value) {
   return Math.round(Number(value) || 0);
@@ -198,14 +200,27 @@ function MealPlanScreen() {
           {DAYS.map((day) => {
             const dayPlan = planData.weeklyPlan[day];
             const totals = planData.dailyTotals[day];
+            const target = planData.dailyTargets?.[day];
+            const dayType = planData.dayTypes?.[day];
             return (
               <div key={day} className="screen-card">
                 <div className="day-card-header">
-                  <h2>{dayLabel(weekStartDate, day)}</h2>
+                  <div className="day-card-title-row">
+                    <h2>{dayLabel(weekStartDate, day)}</h2>
+                    {DAY_TYPE_LABELS[dayType] && (
+                      <span className={`day-type-badge day-type-badge--${dayType}`}>{DAY_TYPE_LABELS[dayType]}</span>
+                    )}
+                  </div>
                   {totals && totals.calories > 0 && (
                     <span className="day-card-totals">
                       {formatMacro(totals.calories)} cal &middot; {formatMacro(totals.protein_g)}g P &middot;{' '}
                       {formatMacro(totals.carbs_g)}g C &middot; {formatMacro(totals.fat_g)}g F
+                    </span>
+                  )}
+                  {target && (
+                    <span className="day-card-target">
+                      Target: {formatMacro(target.calories)} cal &middot; {formatMacro(target.protein_g)}g P &middot;{' '}
+                      {formatMacro(target.carbs_g)}g C &middot; {formatMacro(target.fat_g)}g F
                     </span>
                   )}
                 </div>
@@ -220,7 +235,14 @@ function MealPlanScreen() {
                           {meal ? (
                             <>
                               <div className="meal-slot-details">
-                                <span className="meal-slot-name">{meal.recipe_name}</span>
+                                <span className="meal-slot-name">
+                                  {meal.recipe_name}
+                                  {WORKOUT_TAG_LABELS[meal.workoutTag] && (
+                                    <span className={`workout-tag-badge workout-tag-badge--${meal.workoutTag}`}>
+                                      {WORKOUT_TAG_LABELS[meal.workoutTag]}
+                                    </span>
+                                  )}
+                                </span>
                                 <span className="meal-slot-macros">
                                   {formatMacro(meal.calories)} cal &middot; {formatMacro(meal.protein_g)}g P &middot;{' '}
                                   {formatMacro(meal.carbs_g)}g C &middot; {formatMacro(meal.fat_g)}g F &middot;{' '}

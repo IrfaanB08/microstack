@@ -105,6 +105,13 @@
   color: var(--text-secondary);
 }
 
+.macro-reveal-daytype-label {
+  margin: 0.5rem 0 0.25rem 0;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
 /* Plan preview */
 .plan-preview-list {
   display: flex;

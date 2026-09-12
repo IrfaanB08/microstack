@@ -2,6 +2,7 @@ const Recipe = require('../models/Recipe');
 const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
 const { getTodayDate, getWeekStartDate } = require('./dateHelpers');
+const { getDayType } = require('./workoutSchedule');
 
 class MealPlanGenerator {
   constructor() {
@@ -21,8 +22,10 @@ class MealPlanGenerator {
     } = options;
 
     try {
-      // Get user's macro targets (calculate if not set)
-      const macroTargets = this.getUserMacroTargets(user);
+      // Get the user's macro targets for each day of the week - training
+      // days and rest days get their own (macro-cycled) target instead of
+      // one flat target shared across the whole week.
+      const macroTargetsByDay = this.getUserMacroTargetsForWeek(user);
 
       // Determine which meals to plan based on eating-out frequency
       const mealsToPlan = this.calculateMealsToPlan(user.eating_out_frequency);
@@ -37,7 +40,7 @@ class MealPlanGenerator {
       // Generate meal assignments
       const mealAssignments = await this.assignMealsToSlots(
         suitableRecipes,
-        macroTargets,
+        macroTargetsByDay,
         mealsToPlan,
         existingMealPlan,
         user.prep_time_preference
@@ -50,7 +53,7 @@ class MealPlanGenerator {
       const adjustedAssignments = this.adjustForMacroTargets(
         mealAssignments,
         suitableRecipes,
-        macroTargets,
+        macroTargetsByDay,
         dailyMacros
       );
 
@@ -68,7 +71,7 @@ class MealPlanGenerator {
         assignments: adjustedAssignments,
         dailyMacros: this.calculateDailyMacros(adjustedAssignments, suitableRecipes),
         weeklyMacros: this.calculateWeeklyMacros(adjustedAssignments, suitableRecipes),
-        macroTargets,
+        macroTargetsByDay,
       };
     } catch (error) {
       console.error('Error generating meal plan:', error);
@@ -93,9 +96,26 @@ class MealPlanGenerator {
   }
 
   /**
-   * Get user's macro targets (calculate if not set)
+   * Get user's macro targets (calculate if not set), with no day-specific
+   * macro cycling applied. Kept for callers that genuinely want one flat
+   * target regardless of day (e.g. a generic "your targets" preview);
+   * meal plan generation itself uses getUserMacroTargetsForDay/-ForWeek
+   * below so training and rest days get their own cycled targets.
    */
   getUserMacroTargets(user) {
+    return this.getUserMacroTargetsForDay(user, undefined);
+  }
+
+  /**
+   * Get the user's macro targets for one specific day of the week -
+   * same total calories as any other day, but with carbs/fat cycled
+   * toward carbs on a training day or fat on a rest day (see
+   * MacroCalculator.getMacroRatios). Pass `dayOfWeek: undefined` for the
+   * plain, uncycled targets.
+   */
+  getUserMacroTargetsForDay(user, dayOfWeek) {
+    const dayType = dayOfWeek === undefined ? undefined : getDayType(user, dayOfWeek);
+
     // If user has body stats, calculate targets
     if (user.weight_kg && user.height_cm && user.age && user.sex && user.activity_level) {
       const MacroCalculator = require('./macroCalculator');
@@ -105,16 +125,33 @@ class MealPlanGenerator {
         age: user.age,
         sex: user.sex,
       };
-      return MacroCalculator.calculateTargets(bodyStats, user.goal, user.activity_level);
+      return MacroCalculator.calculateTargets(bodyStats, user.goal, user.activity_level, dayType);
     }
 
-    // Default targets if body stats not available
+    // Default targets if body stats not available - macro cycling needs
+    // real body stats to compute a calorie base to shift within, so this
+    // fallback stays flat regardless of day type.
     return {
       calories: 2000,
       protein_g: 150,
       carbs_g: 200,
       fat_g: 65,
+      dayType: dayType || 'neutral',
     };
+  }
+
+  /**
+   * Get the user's macro targets for every day of the week at once, keyed
+   * by day_of_week (0=Sunday..6=Saturday) - what generateWeeklyPlan uses
+   * so each day's slot-filling and macro reporting reflects that day's
+   * own (possibly cycled) target instead of one shared flat value.
+   */
+  getUserMacroTargetsForWeek(user) {
+    const targetsByDay = {};
+    for (const day of this.daysOfWeek) {
+      targetsByDay[day] = this.getUserMacroTargetsForDay(user, day);
+    }
+    return targetsByDay;
   }
 
   /**
@@ -243,9 +280,9 @@ class MealPlanGenerator {
    * routed to assignMealsToSlotsBatch instead, which deliberately repeats
    * a small pool of recipes so there's something worth batch-cooking.
    */
-  async assignMealsToSlots(recipes, macroTargets, mealsToPlan, existingMealPlan = null, prepTimePreference = 'daily') {
+  async assignMealsToSlots(recipes, macroTargetsByDay, mealsToPlan, existingMealPlan = null, prepTimePreference = 'daily') {
     if (prepTimePreference === 'batch') {
-      return this.assignMealsToSlotsBatch(recipes, macroTargets, mealsToPlan);
+      return this.assignMealsToSlotsBatch(recipes, macroTargetsByDay, mealsToPlan);
     }
 
     const assignments = {};
@@ -288,17 +325,17 @@ class MealPlanGenerator {
             return sum + ((parseFloat(r.calories) || 0) * multiplier);
           }, 0);
         
-        const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
-        const remainingSlots = this.mealSlots.filter(s => 
+        const remainingCalories = macroTargetsByDay[day].calories - dayCaloriesSoFar;
+        const remainingSlots = this.mealSlots.filter(s =>
           !assignments[day][s] && mealsToPlan[day]?.[s]
         ).length;
-        
+
         // Use adaptive target based on remaining budget
         const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
 
         // Get suitable recipes for this slot
         const slotRecipes = this.getRecipesForSlot(recipes, slot, usedRecipes);
-        
+
         if (slotRecipes.length > 0) {
           // Try to combine 2-3 recipes to hit target
           const mealCombination = this.combineRecipesForSlot(slotRecipes, targetPerSlot, usedRecipes, slot);
@@ -318,9 +355,9 @@ class MealPlanGenerator {
           } else {
             // Fallback to single recipe with realistic portion scaling (max 1.5x)
             const selectedRecipe = this.selectRecipeForSlot(
-              slotRecipes, 
-              slot, 
-              macroTargets,
+              slotRecipes,
+              slot,
+              macroTargetsByDay[day],
               assignments,
               day,
               mealsToPlan
@@ -356,9 +393,9 @@ class MealPlanGenerator {
    * calorie budget (same portion-scaling approach as the single-recipe
    * fallback above, capped at 1.5x).
    */
-  assignMealsToSlotsBatch(recipes, macroTargets, mealsToPlan) {
+  assignMealsToSlotsBatch(recipes, macroTargetsByDay, mealsToPlan) {
     const assignments = {};
-    const anchorPool = this.selectBatchRecipePool(recipes, macroTargets, mealsToPlan);
+    const anchorPool = this.selectBatchRecipePool(recipes, macroTargetsByDay, mealsToPlan);
 
     for (const day of this.daysOfWeek) {
       assignments[day] = {};
@@ -379,7 +416,7 @@ class MealPlanGenerator {
           .filter((r) => r !== null)
           .reduce((sum, r) => sum + (parseFloat(r.calories) || 0) * (r._portionMultiplier || 1.0), 0);
 
-        const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
+        const remainingCalories = macroTargetsByDay[day].calories - dayCaloriesSoFar;
         const remainingSlots = this.mealSlots.filter(
           (s) => !assignments[day][s] && mealsToPlan[day]?.[s]
         ).length;
@@ -406,10 +443,16 @@ class MealPlanGenerator {
    * this typically yields 3-4 unique recipes for the whole week, each one
    * repeated across every day that slot is planned.
    */
-  selectBatchRecipePool(recipes, macroTargets, mealsToPlan) {
+  selectBatchRecipePool(recipes, macroTargetsByDay, mealsToPlan) {
     const pool = {};
     const usedRecipeIds = new Set();
-    const approxTargetPerSlot = macroTargets.calories / this.mealSlots.length;
+    // Calorie targets are the same every day (macro cycling only shifts
+    // carbs/fat) - average across the week purely as a defensive guard in
+    // case that ever changes, rather than assuming day 0 is representative.
+    const avgDailyCalories = this.daysOfWeek.reduce(
+      (sum, day) => sum + macroTargetsByDay[day].calories, 0
+    ) / this.daysOfWeek.length;
+    const approxTargetPerSlot = avgDailyCalories / this.mealSlots.length;
 
     for (const slot of this.mealSlots) {
       const slotNeeded = this.daysOfWeek.some((day) => mealsToPlan[day]?.[slot]);
@@ -721,7 +764,7 @@ class MealPlanGenerator {
   /**
    * Adjust meal assignments to better hit macro targets
    */
-  adjustForMacroTargets(assignments, recipes, macroTargets, dailyMacros) {
+  adjustForMacroTargets(assignments, recipes, macroTargetsByDay, dailyMacros) {
     // Skip adjustment to preserve combined meals
     // The combination logic already tries to hit targets
     return assignments;
@@ -833,7 +876,7 @@ class MealPlanGenerator {
       const newRecipe = this.selectRecipeForSlot(
         availableRecipes,
         slot,
-        this.getUserMacroTargets(user),
+        this.getUserMacroTargetsForDay(user, day),
         currentAssignments,
         day,
         mealsToPlan
@@ -878,7 +921,7 @@ class MealPlanGenerator {
       }
 
       // Generate new assignments for this day
-      const macroTargets = this.getUserMacroTargets(user);
+      const macroTargets = this.getUserMacroTargetsForDay(user, day);
       const suitableRecipes = await this.fetchSuitableRecipes(user);
       const mealsToPlan = this.calculateMealsToPlan(user.eating_out_frequency);
 

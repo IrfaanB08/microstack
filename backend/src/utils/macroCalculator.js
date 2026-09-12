@@ -70,9 +70,21 @@ class MacroCalculator {
   }
 
   /**
-   * Calculate macro ratios based on goal
+   * Calculate macro ratios based on goal, optionally cycled for a
+   * training or rest day.
+   *
+   * Macro cycling keeps protein and total calories exactly the same
+   * every day - only the carb/fat balance within that same calorie
+   * budget shifts, by equal and opposite amounts (so the three ratios
+   * still sum to 1): higher carbs on a training day to fuel/recover from
+   * the workout, higher fat on a rest day. +/-10 points keeps every
+   * existing goal's carbs and fat within a reasonable 15%-55% range in
+   * both directions, so no clamping is needed for the goals defined here.
+   *
+   * @param {string} goal - 'bulk' | 'cut' | 'maintain' | 'recomp'
+   * @param {string} [dayType] - 'training' | 'rest' | undefined (no cycling)
    */
-  static getMacroRatios(goal) {
+  static getMacroRatios(goal, dayType) {
     const ratios = {
       bulk: { protein: 0.3, carbs: 0.45, fat: 0.25 },      // Higher carbs for energy
       cut: { protein: 0.4, carbs: 0.3, fat: 0.3 },        // Higher protein for satiety
@@ -80,7 +92,18 @@ class MacroCalculator {
       recomp: { protein: 0.35, carbs: 0.35, fat: 0.3 },    // Higher protein for muscle retention
     };
 
-    return ratios[goal] || ratios.maintain;
+    const base = ratios[goal] || ratios.maintain;
+
+    if (dayType !== 'training' && dayType !== 'rest') {
+      return base;
+    }
+
+    const shift = dayType === 'training' ? 0.10 : -0.10;
+    return {
+      protein: base.protein,
+      carbs: base.carbs + shift,
+      fat: base.fat - shift,
+    };
   }
 
   /**
@@ -99,9 +122,13 @@ class MacroCalculator {
   }
 
   /**
-   * Main calculation function - returns complete macro targets
+   * Main calculation function - returns complete macro targets.
+   *
+   * @param {string} [dayType] - 'training' | 'rest' to cycle carbs/fat for
+   *   that day (same total calories either way); omit for the plain
+   *   goal-based ratios with no cycling.
    */
-  static calculateTargets(bodyStats, goal, activityLevel) {
+  static calculateTargets(bodyStats, goal, activityLevel, dayType) {
     const { weight_kg, height_cm, age, sex } = bodyStats;
 
     // Calculate BMR
@@ -114,8 +141,8 @@ class MacroCalculator {
     const calorieAdjustment = this.getCalorieAdjustment(goal);
     const targetCalories = tdee + calorieAdjustment;
 
-    // Get macro ratios for goal
-    const { protein, carbs, fat } = this.getMacroRatios(goal);
+    // Get macro ratios for goal (and day type, if cycling)
+    const { protein, carbs, fat } = this.getMacroRatios(goal, dayType);
 
     // Calculate macro grams
     const macros = this.calculateMacros(targetCalories, protein, carbs, fat);
@@ -129,6 +156,7 @@ class MacroCalculator {
       tdee,
       activity_multiplier: this.getActivityMultiplier(activityLevel),
       calorie_adjustment: calorieAdjustment,
+      dayType: dayType === 'training' || dayType === 'rest' ? dayType : 'neutral',
     };
   }
 

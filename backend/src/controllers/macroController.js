@@ -3,7 +3,7 @@ const MacroCalculator = require('../utils/macroCalculator');
 const macroController = {
   calculateTargets: (req, res) => {
     try {
-      const { bodyStats, goal, activityLevel } = req.body;
+      const { bodyStats, goal, activityLevel, dayType } = req.body;
 
       // Validate required fields
       if (!bodyStats || !goal || !activityLevel) {
@@ -35,8 +35,17 @@ const macroController = {
         });
       }
 
+      // Validate day type if provided (optional - lets a caller preview a
+      // training-day or rest-day target specifically; omit for the plain
+      // goal-based target with no macro cycling applied)
+      if (dayType !== undefined && dayType !== 'training' && dayType !== 'rest') {
+        return res.status(400).json({
+          error: "Invalid dayType. Must be 'training' or 'rest' if provided.",
+        });
+      }
+
       // Calculate targets
-      const targets = MacroCalculator.calculateTargets(bodyStats, goal, activityLevel);
+      const targets = MacroCalculator.calculateTargets(bodyStats, goal, activityLevel, dayType);
 
       res.json({
         success: true,

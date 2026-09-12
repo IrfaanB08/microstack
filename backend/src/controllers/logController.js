@@ -7,6 +7,7 @@ const MacroCalculator = require('../utils/macroCalculator');
 const { matchPlannedMeal } = require('../utils/foodMatcher');
 const { estimateNutrition } = require('../utils/foodEstimator');
 const { getTodayDate, isValidDateString, getDayOfWeek, getWeekStartDate } = require('../utils/dateHelpers');
+const { getDayType, getWorkoutMealTag } = require('../utils/workoutSchedule');
 
 const MACRO_FIELDS = ['calories', 'protein_g', 'carbs_g', 'fat_g'];
 
@@ -275,6 +276,12 @@ const logController = {
         return res.status(404).json({ error: 'User not found' });
       }
 
+      // Needed both for day-aware macro targets (cycled toward carbs on a
+      // training day, fat on a rest day) and for locating this date's
+      // planned meals further down.
+      const dayOfWeek = getDayOfWeek(date);
+      const dayType = getDayType(user, dayOfWeek) || 'neutral';
+
       let targets = null;
       const targetsAvailable = !!(
         user.weight_kg && user.height_cm && user.age && user.sex && user.activity_level
@@ -287,7 +294,7 @@ const logController = {
           age: user.age,
           sex: user.sex,
         };
-        targets = MacroCalculator.calculateTargets(bodyStats, user.goal, user.activity_level);
+        targets = MacroCalculator.calculateTargets(bodyStats, user.goal, user.activity_level, getDayType(user, dayOfWeek));
       }
 
       const [entries, totalsRow] = await Promise.all([
@@ -321,7 +328,6 @@ const logController = {
       }
 
       // Today's planned meals, if the user has a meal plan for this week.
-      const dayOfWeek = getDayOfWeek(date);
       const weekStartDate = getWeekStartDate(date);
       const mealPlan = await MealPlan.findByUserAndWeek(userId, weekStartDate);
 
@@ -343,12 +349,14 @@ const logController = {
           fat_g: meal.fat_g,
           prep_time_minutes: meal.prep_time_minutes,
           logged: loggedPlannedMealIds.has(meal.id),
+          workoutTag: getWorkoutMealTag(user, dayOfWeek, meal.meal_slot),
         }));
       }
 
       res.json({
         success: true,
         date,
+        dayType,
         targetsAvailable,
         targets,
         consumed,

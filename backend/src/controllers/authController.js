@@ -199,6 +199,28 @@ const authController = {
         }
       }
 
+      // Validate workout days if provided - day_of_week integers (0=Sunday..6=Saturday),
+      // matching the convention planned_meals already uses. An empty array is valid -
+      // it explicitly means "I don't train any day".
+      if (profileData.workout_days) {
+        if (!Array.isArray(profileData.workout_days)
+          || !profileData.workout_days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
+          return res.status(400).json({
+            error: 'workout_days must be an array of integers 0-6 (0=Sunday, 6=Saturday)',
+          });
+        }
+      }
+
+      // Validate workout time of day if provided
+      if (profileData.workout_time_of_day) {
+        const validTimings = ['morning', 'evening'];
+        if (!validTimings.includes(profileData.workout_time_of_day)) {
+          return res.status(400).json({
+            error: `Invalid workout_time_of_day. Must be one of: ${validTimings.join(', ')}`,
+          });
+        }
+      }
+
       // Update user profile
       const updatedUser = await User.updateProfile(userId, profileData);
 

@@ -11,20 +11,66 @@
 
 .day-card-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  flex-direction: column;
+  gap: 0.2rem;
   margin-bottom: 0.75rem;
+}
+
+.day-card-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .day-card-header h2 {
   margin: 0;
 }
 
-.day-card-totals {
+.day-card-totals,
+.day-card-target {
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+.day-type-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.day-type-badge--training {
+  color: #b45309;
+  border-color: #b45309;
+}
+
+.day-type-badge--rest {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.workout-tag-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.workout-tag-badge--pre-workout {
+  background-color: rgba(180, 83, 9, 0.15);
+  color: #b45309;
+}
+
+.workout-tag-badge--post-workout {
+  background-color: rgba(79, 70, 229, 0.12);
+  color: var(--accent);
 }
 
 .meal-slot-list {

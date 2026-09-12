@@ -4,6 +4,7 @@ const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
 const User = require('../models/User');
 const ShoppingListItem = require('../models/ShoppingListItem');
+const { getDayType, getWorkoutMealTag } = require('../utils/workoutSchedule');
 
 const mealPlanController = {
   /**
@@ -96,6 +97,10 @@ const mealPlanController = {
         mealPlan = mealPlans[0];
       }
 
+      // Fetch the user - needed for per-day macro targets (macro cycling)
+      // and pre/post-workout meal tagging.
+      const user = await User.findById(userId);
+
       // Get planned meals with recipe details
       const plannedMeals = await PlannedMeal.findByMealPlanId(mealPlan.id);
 
@@ -113,7 +118,7 @@ const mealPlanController = {
       for (const plannedMeal of plannedMeals) {
         const day = plannedMeal.day_of_week;
         const slot = plannedMeal.meal_slot;
-        
+
         if (weeklyPlan[day]) {
           weeklyPlan[day][slot] = {
             planned_meal_id: plannedMeal.id,
@@ -127,6 +132,7 @@ const mealPlanController = {
             tags: plannedMeal.tags,
             ingredients: plannedMeal.ingredients,
             steps: plannedMeal.steps,
+            workoutTag: getWorkoutMealTag(user, day, slot),
           };
         }
       }
@@ -167,6 +173,18 @@ const mealPlanController = {
         }
       }
 
+      // Each day's actual macro target (same calories every day; carbs/fat
+      // cycled toward carbs on a training day or fat on a rest day - see
+      // MealPlanGenerator.getUserMacroTargetsForWeek). dayTypes lets the
+      // frontend show a "Training day" / "Rest day" label without
+      // re-deriving it from workout_days itself.
+      const generator = new MealPlanGenerator();
+      const dailyTargets = user ? generator.getUserMacroTargetsForWeek(user) : null;
+      const dayTypes = {};
+      for (let i = 0; i < 7; i++) {
+        dayTypes[i] = getDayType(user, i) || 'neutral';
+      }
+
       res.json({
         success: true,
         mealPlan: {
@@ -179,6 +197,8 @@ const mealPlanController = {
         weeklyPlan,
         dailyTotals,
         weeklyTotals,
+        dailyTargets,
+        dayTypes,
       });
     } catch (error) {
       console.error('Error getting meal plan:', error);

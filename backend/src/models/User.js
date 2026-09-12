@@ -36,11 +36,13 @@ class User {
       weekly_grocery_budget,
       prep_time_preference,
       eating_out_frequency,
+      workout_days,
+      workout_time_of_day,
     } = profileData;
 
     const query = `
-      UPDATE users 
-      SET 
+      UPDATE users
+      SET
         goal = COALESCE($1, goal),
         weight_kg = COALESCE($2, weight_kg),
         height_cm = COALESCE($3, height_cm),
@@ -51,8 +53,10 @@ class User {
         weekly_grocery_budget = COALESCE($8, weekly_grocery_budget),
         prep_time_preference = COALESCE($9, prep_time_preference),
         eating_out_frequency = COALESCE($10, eating_out_frequency),
-        updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $11 
+        workout_days = COALESCE($11, workout_days),
+        workout_time_of_day = COALESCE($12, workout_time_of_day),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $13
       RETURNING *
     `;
     const values = [
@@ -66,6 +70,13 @@ class User {
       weekly_grocery_budget,
       prep_time_preference,
       eating_out_frequency,
+      // Same truthy-check trick as dietary_preferences above: an empty
+      // array [] is truthy in JS, so it's still stringified and applied
+      // (an explicit "I don't train any day"), while omitting the field
+      // (undefined) or passing null falls through to COALESCE, which
+      // leaves whatever was already stored untouched.
+      workout_days ? JSON.stringify(workout_days) : null,
+      workout_time_of_day,
       id,
     ];
     const result = await pool.query(query, values);

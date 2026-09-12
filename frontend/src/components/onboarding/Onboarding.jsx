@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import DietaryPreferencesPicker from '../DietaryPreferencesPicker';
+import WorkoutDaysPicker from '../WorkoutDaysPicker';
 import '../Screen.css';
 import './Onboarding.css';
 
 const STEP_TITLES = [
-  'Welcome', 'Your goal', 'Body stats', 'Your targets',
+  'Welcome', 'Your goal', 'Body stats', 'Workout schedule', 'Your targets',
   'Dietary preferences', 'Budget & prep time', 'Eating out', 'Your first week',
 ];
 const TOTAL_STEPS = STEP_TITLES.length;
@@ -36,6 +37,8 @@ const INITIAL_DATA = {
   age: '',
   sex: 'male',
   activity_level: 'moderate',
+  workout_days: [],
+  workout_time_of_day: 'morning',
   dietary_preferences: [],
   weekly_grocery_budget: '',
   prep_time_preference: 'batch',
@@ -71,23 +74,32 @@ function Onboarding({ onComplete, onSkip }) {
 
   const merge = (partial) => setData((current) => ({ ...current, ...partial }));
 
-  // Auto-calculate the macro-reveal once body stats + goal are known.
+  // Auto-calculate the macro-reveal once body stats, goal, and workout
+  // schedule are known. Shows a single flat target if no training days
+  // are set, or a training-day vs rest-day comparison if they are.
   useEffect(() => {
-    if (step !== 3 || macroTargets || calculatingMacros) return;
+    if (step !== 4 || macroTargets || calculatingMacros) return;
     setCalculatingMacros(true);
     setError(null);
-    api.macros
-      .calculate({
-        bodyStats: {
-          weight_kg: Number(data.weight_kg),
-          height_cm: Number(data.height_cm),
-          age: Number(data.age),
-          sex: data.sex,
-        },
-        goal: data.goal,
-        activityLevel: data.activity_level,
-      })
-      .then((result) => setMacroTargets(result.targets))
+
+    const bodyStats = {
+      weight_kg: Number(data.weight_kg),
+      height_cm: Number(data.height_cm),
+      age: Number(data.age),
+      sex: data.sex,
+    };
+    const base = { bodyStats, goal: data.goal, activityLevel: data.activity_level };
+    const hasWorkoutDays = data.workout_days.length > 0;
+
+    const request = hasWorkoutDays
+      ? Promise.all([
+          api.macros.calculate({ ...base, dayType: 'training' }),
+          api.macros.calculate({ ...base, dayType: 'rest' }),
+        ]).then(([training, rest]) => ({ training: training.targets, rest: rest.targets }))
+      : api.macros.calculate(base).then((result) => ({ neutral: result.targets }));
+
+    request
+      .then(setMacroTargets)
       .catch((err) => setError(err.message || 'Failed to calculate your targets'))
       .finally(() => setCalculatingMacros(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +125,11 @@ function Onboarding({ onComplete, onSkip }) {
         age: Number(data.age),
         sex: data.sex,
         activity_level: data.activity_level,
+        // Sent even when empty - an empty array is a deliberate "I don't
+        // train any day" answer, distinct from never having set this at
+        // all (see workoutSchedule.js on the backend).
+        workout_days: data.workout_days,
+        workout_time_of_day: data.workout_time_of_day,
         dietary_preferences: data.dietary_preferences,
         weekly_grocery_budget: data.weekly_grocery_budget === '' ? null : Number(data.weekly_grocery_budget),
         prep_time_preference: data.prep_time_preference,
@@ -131,7 +148,7 @@ function Onboarding({ onComplete, onSkip }) {
 
       const week = await api.mealPlans.getWeek();
       setPlanPreview(week);
-      setStep(7);
+      setStep(8);
     } catch (err) {
       setError(err.message || 'Something went wrong finishing setup');
     } finally {
@@ -147,9 +164,9 @@ function Onboarding({ onComplete, onSkip }) {
   return (
     <div className="onboarding">
       <div className="onboarding-card">
-        {step > 0 && step < 7 && (
+        {step > 0 && step < 8 && (
           <div className="onboarding-progress">
-            {STEP_TITLES.slice(1, 7).map((title, idx) => (
+            {STEP_TITLES.slice(1, 8).map((title, idx) => (
               <span
                 key={title}
                 className={`onboarding-dot${idx + 1 === step ? ' onboarding-dot--active' : ''}${idx + 1 < step ? ' onboarding-dot--done' : ''}`}
@@ -163,16 +180,17 @@ function Onboarding({ onComplete, onSkip }) {
         {step === 0 && <WelcomeStep onNext={goNext} onSkip={onSkip} />}
         {step === 1 && <GoalStep data={data} merge={merge} />}
         {step === 2 && <BodyStatsStep data={data} merge={merge} />}
-        {step === 3 && <MacroRevealStep calculating={calculatingMacros} targets={macroTargets} />}
-        {step === 4 && <DietaryStep data={data} merge={merge} />}
-        {step === 5 && <BudgetPrepStep data={data} merge={merge} />}
-        {step === 6 && <EatingOutStep data={data} merge={merge} />}
-        {step === 7 && <PlanPreviewStep planData={planPreview} macroTargets={macroTargets} onComplete={onComplete} />}
+        {step === 3 && <WorkoutScheduleStep data={data} merge={merge} />}
+        {step === 4 && <MacroRevealStep calculating={calculatingMacros} targets={macroTargets} />}
+        {step === 5 && <DietaryStep data={data} merge={merge} />}
+        {step === 6 && <BudgetPrepStep data={data} merge={merge} />}
+        {step === 7 && <EatingOutStep data={data} merge={merge} />}
+        {step === 8 && <PlanPreviewStep planData={planPreview} macroTargets={macroTargets} onComplete={onComplete} />}
 
-        {step > 0 && step < 7 && (
+        {step > 0 && step < 8 && (
           <div className="onboarding-nav">
             <button type="button" className="btn btn-secondary" onClick={goBack}>Back</button>
-            {step === 6 ? (
+            {step === 7 ? (
               <button type="button" className="btn btn-primary" onClick={finishSetup} disabled={finishing}>
                 {finishing ? 'Building your plan…' : 'Generate my first week'}
               </button>
@@ -267,37 +285,79 @@ function BodyStatsStep({ data, merge }) {
   );
 }
 
+function MacroRevealGrid({ targets }) {
+  return (
+    <div className="macro-reveal-grid">
+      <div className="macro-reveal-item">
+        <span className="macro-reveal-value">{targets.calories}</span>
+        <span className="macro-reveal-label">Calories</span>
+      </div>
+      <div className="macro-reveal-item">
+        <span className="macro-reveal-value">{targets.protein_g}g</span>
+        <span className="macro-reveal-label">Protein</span>
+      </div>
+      <div className="macro-reveal-item">
+        <span className="macro-reveal-value">{targets.carbs_g}g</span>
+        <span className="macro-reveal-label">Carbs</span>
+      </div>
+      <div className="macro-reveal-item">
+        <span className="macro-reveal-value">{targets.fat_g}g</span>
+        <span className="macro-reveal-label">Fat</span>
+      </div>
+    </div>
+  );
+}
+
 function MacroRevealStep({ calculating, targets }) {
   return (
     <div className="onboarding-step">
       <h2>Your daily targets</h2>
       {calculating && <p className="screen-hint">Calculating…</p>}
-      {targets && (
+
+      {targets?.neutral && (
         <>
           <p className="screen-hint">Based on your stats and goal, here’s what we recommend each day:</p>
-          <div className="macro-reveal-grid">
-            <div className="macro-reveal-item">
-              <span className="macro-reveal-value">{targets.calories}</span>
-              <span className="macro-reveal-label">Calories</span>
-            </div>
-            <div className="macro-reveal-item">
-              <span className="macro-reveal-value">{targets.protein_g}g</span>
-              <span className="macro-reveal-label">Protein</span>
-            </div>
-            <div className="macro-reveal-item">
-              <span className="macro-reveal-value">{targets.carbs_g}g</span>
-              <span className="macro-reveal-label">Carbs</span>
-            </div>
-            <div className="macro-reveal-item">
-              <span className="macro-reveal-value">{targets.fat_g}g</span>
-              <span className="macro-reveal-label">Fat</span>
-            </div>
-          </div>
-          <p className="screen-hint">
-            You can fine-tune your goal or stats any time from your Profile - targets update automatically.
-          </p>
+          <MacroRevealGrid targets={targets.neutral} />
         </>
       )}
+
+      {targets?.training && targets?.rest && (
+        <>
+          <p className="screen-hint">
+            Same total calories every day - carbs shift up on training days to fuel recovery, and fat shifts
+            up on rest days:
+          </p>
+          <p className="macro-reveal-daytype-label">🏋️ Training day</p>
+          <MacroRevealGrid targets={targets.training} />
+          <p className="macro-reveal-daytype-label">😴 Rest day</p>
+          <MacroRevealGrid targets={targets.rest} />
+        </>
+      )}
+
+      {targets && (
+        <p className="screen-hint">
+          You can fine-tune your goal, stats, or workout days any time from your Profile - targets update
+          automatically.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function WorkoutScheduleStep({ data, merge }) {
+  return (
+    <div className="onboarding-step">
+      <h2>When do you train?</h2>
+      <p className="screen-hint">
+        We’ll shift your carbs up on training days and tag the meal right before/after your workout. Leave
+        every day off if you don’t have a regular schedule.
+      </p>
+      <WorkoutDaysPicker
+        workoutDays={data.workout_days}
+        workoutTimeOfDay={data.workout_time_of_day}
+        onChangeDays={(workout_days) => merge({ workout_days })}
+        onChangeTiming={(workout_time_of_day) => merge({ workout_time_of_day })}
+      />
     </div>
   );
 }
@@ -391,10 +451,17 @@ function PlanPreviewStep({ planData, macroTargets, onComplete }) {
   return (
     <div className="onboarding-step">
       <h2>Your first week is ready 🎉</h2>
-      {macroTargets && (
+      {macroTargets?.neutral && (
         <p className="screen-hint">
-          Daily target: {macroTargets.calories} cal &middot; {macroTargets.protein_g}g P &middot;{' '}
-          {macroTargets.carbs_g}g C &middot; {macroTargets.fat_g}g F
+          Daily target: {macroTargets.neutral.calories} cal &middot; {macroTargets.neutral.protein_g}g P &middot;{' '}
+          {macroTargets.neutral.carbs_g}g C &middot; {macroTargets.neutral.fat_g}g F
+        </p>
+      )}
+      {macroTargets?.training && macroTargets?.rest && (
+        <p className="screen-hint">
+          🏋️ Training day: {macroTargets.training.calories} cal &middot; {macroTargets.training.carbs_g}g C &middot;{' '}
+          {macroTargets.training.fat_g}g F &nbsp;|&nbsp; 😴 Rest day: {macroTargets.rest.calories} cal &middot;{' '}
+          {macroTargets.rest.carbs_g}g C &middot; {macroTargets.rest.fat_g}g F
         </p>
       )}
       <div className="plan-preview-list">

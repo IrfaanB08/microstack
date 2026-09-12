@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import DietaryPreferencesPicker from './DietaryPreferencesPicker';
+import WorkoutDaysPicker from './WorkoutDaysPicker';
 import './Screen.css';
 import './ProfileScreen.css';
 
@@ -27,6 +28,8 @@ const EMPTY_FORM = {
   age: '',
   sex: 'male',
   activity_level: 'moderate',
+  workout_days: [],
+  workout_time_of_day: 'morning',
   dietary_preferences: [],
   weekly_grocery_budget: '',
   prep_time_preference: 'batch',
@@ -41,6 +44,11 @@ function toFormValues(profile) {
     age: profile.age ?? '',
     sex: profile.sex || 'male',
     activity_level: profile.activity_level || 'moderate',
+    // workout_days is null on the server until the user has explicitly
+    // configured it (see workoutSchedule.js) - default to an empty array
+    // just so the picker has something to render against.
+    workout_days: profile.workout_days || [],
+    workout_time_of_day: profile.workout_time_of_day || 'morning',
     dietary_preferences: profile.dietary_preferences || [],
     weekly_grocery_budget: profile.weekly_grocery_budget ?? '',
     prep_time_preference: profile.prep_time_preference || 'batch',
@@ -57,11 +65,23 @@ function ProfileScreen() {
   const [saveError, setSaveError] = useState(null);
   const [saved, setSaved] = useState(false);
 
+  // Whether the loaded profile already had a workout schedule configured
+  // (workout_days non-null), and whether the user has touched that
+  // section in this session. Saving the form should only send
+  // workout_days/workout_time_of_day when one of these is true - a user
+  // who never configured a schedule and just saves an unrelated field
+  // (like their weight) shouldn't silently turn on "every day is a rest
+  // day" macro cycling just because the picker defaults to nothing
+  // selected. See toFormValues() and workoutSchedule.js on the backend.
+  const [workoutDaysEverConfigured, setWorkoutDaysEverConfigured] = useState(false);
+  const [workoutDaysTouched, setWorkoutDaysTouched] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
         const data = await api.auth.getProfile();
         setForm(toFormValues(data.user));
+        setWorkoutDaysEverConfigured(data.user.workout_days !== null && data.user.workout_days !== undefined);
       } catch (err) {
         setError(err.message || 'Failed to load your profile');
       } finally {
@@ -90,9 +110,14 @@ function ProfileScreen() {
         prep_time_preference: form.prep_time_preference,
         eating_out_frequency: Number(form.eating_out_frequency) || 0,
       };
+      if (workoutDaysEverConfigured || workoutDaysTouched) {
+        payload.workout_days = form.workout_days;
+        payload.workout_time_of_day = form.workout_time_of_day;
+      }
       const data = await api.auth.updateProfile(payload);
       updateUser(data.user);
       setForm(toFormValues(data.user));
+      setWorkoutDaysEverConfigured(data.user.workout_days !== null && data.user.workout_days !== undefined);
       setSaved(true);
     } catch (err) {
       setSaveError(err.message || 'Failed to save your profile');
@@ -177,6 +202,25 @@ function ProfileScreen() {
               </select>
             </label>
           </div>
+        </div>
+
+        <div className="screen-card">
+          <h2>Workout schedule</h2>
+          <p className="screen-hint profile-section-hint">
+            Shifts your carbs up on training days and tags the meal right before/after your workout.
+          </p>
+          <WorkoutDaysPicker
+            workoutDays={form.workout_days}
+            workoutTimeOfDay={form.workout_time_of_day}
+            onChangeDays={(workout_days) => {
+              setWorkoutDaysTouched(true);
+              setField('workout_days')(workout_days);
+            }}
+            onChangeTiming={(workout_time_of_day) => {
+              setWorkoutDaysTouched(true);
+              setField('workout_time_of_day')(workout_time_of_day);
+            }}
+          />
         </div>
 
         <div className="screen-card">
