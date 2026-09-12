@@ -1,0 +1,10 @@
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.profile-section-hint {
+  margin-bottom: 0.85rem;
+}
+

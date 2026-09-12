@@ -151,15 +151,18 @@ const mealPlanController = {
         for (const slot of ['breakfast', 'lunch', 'dinner', 'snack']) {
           const meal = weeklyPlan[i][slot];
           if (meal) {
-            dailyTotals[i].calories += meal.calories || 0;
-            dailyTotals[i].protein_g += meal.protein_g || 0;
-            dailyTotals[i].carbs_g += meal.carbs_g || 0;
-            dailyTotals[i].fat_g += meal.fat_g || 0;
+            // protein_g/carbs_g/fat_g are decimal columns, which pg returns
+            // as strings (e.g. "18.20") - Number(...) them before adding,
+            // or `+=` silently concatenates instead of summing.
+            dailyTotals[i].calories += Number(meal.calories) || 0;
+            dailyTotals[i].protein_g += Number(meal.protein_g) || 0;
+            dailyTotals[i].carbs_g += Number(meal.carbs_g) || 0;
+            dailyTotals[i].fat_g += Number(meal.fat_g) || 0;
 
-            weeklyTotals.calories += meal.calories || 0;
-            weeklyTotals.protein_g += meal.protein_g || 0;
-            weeklyTotals.carbs_g += meal.carbs_g || 0;
-            weeklyTotals.fat_g += meal.fat_g || 0;
+            weeklyTotals.calories += Number(meal.calories) || 0;
+            weeklyTotals.protein_g += Number(meal.protein_g) || 0;
+            weeklyTotals.carbs_g += Number(meal.carbs_g) || 0;
+            weeklyTotals.fat_g += Number(meal.fat_g) || 0;
           }
         }
       }

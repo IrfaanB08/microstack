@@ -45,8 +45,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  /** Merge fresh fields into the current user (e.g. after a profile edit). */
+  const updateUser = (partialUser) => {
+    setUser((current) => ({ ...current, ...partialUser }));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

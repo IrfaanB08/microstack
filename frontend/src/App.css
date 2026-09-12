@@ -70,12 +70,35 @@
   text-align: center;
 }
 
-/* The dashboard manages its own alignment - it's a scrolling list of
-   cards, not a single centered block like the login screen. */
-.app-main--dashboard {
-  align-items: flex-start;
+.app-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  text-align: left;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+/* Authenticated app shell: NavBar (bottom tab bar on mobile, sidebar on
+   wider screens - see NavBar.css) plus the active screen. The content
+   area needs clearance so the bottom bar never covers it, and an offset
+   margin once the nav becomes a left sidebar. */
+.app-shell {
+  flex: 1;
+  display: flex;
+}
+
+.app-shell-content {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 64px;
+}
+
+@media (min-width: 768px) {
+  .app-shell-content {
+    padding-bottom: 0;
+    margin-left: 220px;
+  }
 }
 
 /* Mobile-first responsive adjustments */

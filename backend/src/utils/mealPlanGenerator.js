@@ -1,6 +1,7 @@
 const Recipe = require('../models/Recipe');
 const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
+const { getTodayDate, getWeekStartDate } = require('./dateHelpers');
 
 class MealPlanGenerator {
   constructor() {
@@ -76,16 +77,19 @@ class MealPlanGenerator {
   }
 
   /**
-   * Get current week start date (Sunday)
+   * Get current week start date (Sunday), as a plain 'YYYY-MM-DD' string.
+   *
+   * Delegates to dateHelpers rather than doing this inline: the previous
+   * implementation built the date at local midnight and read it back via
+   * `.toISOString()`, which converts to UTC and silently returns the
+   * previous calendar day whenever the server's timezone is ahead of UTC.
+   * That's not just a display glitch - the shifted string is what gets
+   * stored as meal_plans.week_start_date, so plans generated without an
+   * explicit week (e.g. right after onboarding) landed on the wrong week
+   * and became invisible to lookups that compute the correct Sunday.
    */
   getCurrentWeekStart() {
-    const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day;
-    const sunday = new Date(now.setDate(diff));
-    sunday.setHours(0, 0, 0, 0);
-    // Return date in YYYY-MM-DD format
-    return sunday.toISOString().split('T')[0];
+    return getWeekStartDate(getTodayDate());
   }
 
   /**
@@ -502,8 +506,8 @@ class MealPlanGenerator {
       }, 0);
     
     const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
-    const remainingSlots = this.mealSlots.filter(s => 
-      !currentAssignments[currentDay][s] && mealsToPlan[currentDay]?.[s]
+    const remainingSlots = this.mealSlots.filter(s =>
+      !currentAssignments[currentDay]?.[s] && mealsToPlan[currentDay]?.[s]
     ).length;
     
     const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
@@ -808,14 +812,31 @@ class MealPlanGenerator {
         throw new Error('No alternative recipes available');
       }
 
+      // Build the same day-aware calorie budget the main generator uses:
+      // every OTHER already-planned meal that day counts against the
+      // day's target, and the slot being swapped is the one remaining
+      // slot to fill with whatever budget is left. Without this,
+      // selectRecipeForSlot sees an empty day (no calories accounted for
+      // and no remaining slots), so `targetPerSlot` collapses to 0 and it
+      // always picks the lowest-calorie recipe available - e.g. swapping
+      // in an 87-calorie snack for what should be a full lunch.
+      const otherMealsThatDay = {};
+      for (const plannedMeal of plannedMeals) {
+        if (plannedMeal.meal_slot !== slot) {
+          otherMealsThatDay[plannedMeal.meal_slot] = plannedMeal;
+        }
+      }
+      const currentAssignments = { [day]: otherMealsThatDay };
+      const mealsToPlan = { [day]: { [slot]: true } };
+
       // Select new recipe
       const newRecipe = this.selectRecipeForSlot(
-        availableRecipes, 
-        slot, 
+        availableRecipes,
+        slot,
         this.getUserMacroTargets(user),
-        {},
+        currentAssignments,
         day,
-        {}
+        mealsToPlan
       );
 
       // Update planned meal

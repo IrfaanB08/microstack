@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import MacroProgress from './MacroProgress';
 import './Dashboard.css';
@@ -38,7 +37,6 @@ function formatMacro(value) {
 }
 
 function Dashboard() {
-  const { user, logout } = useAuth();
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -148,10 +146,6 @@ function Dashboard() {
         <div>
           <h1>Today</h1>
           <p className="dashboard-date">{todayLabel()}</p>
-        </div>
-        <div className="dashboard-header-actions">
-          <span className="dashboard-user-email">{user?.email}</span>
-          <button className="dashboard-logout" onClick={logout}>Log out</button>
         </div>
       </header>
 

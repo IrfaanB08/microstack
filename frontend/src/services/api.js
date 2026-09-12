@@ -53,7 +53,13 @@ export const api = {
     register: (userData) =>
       request('/auth/register', { method: 'POST', body: JSON.stringify(userData) }),
     getProfile: () => request('/auth/profile'),
+    updateProfile: (profileData) =>
+      request('/auth/profile', { method: 'PUT', body: JSON.stringify(profileData) }),
     setToken,
+  },
+
+  macros: {
+    calculate: (payload) => request('/macros/calculate', { method: 'POST', body: JSON.stringify(payload) }),
   },
 
   logs: {
@@ -67,6 +73,21 @@ export const api = {
 
   mealPlans: {
     getWeek: (weekStartDate) => request(`/meal-plans/week${weekStartDate ? `/${weekStartDate}` : ''}`),
+    getAll: () => request('/meal-plans'),
     generate: (options) => request('/meal-plans/generate', { method: 'POST', body: JSON.stringify(options || {}) }),
+    swapMeal: (mealPlanId, day, slot) =>
+      request(`/meal-plans/${mealPlanId}/swap`, { method: 'PUT', body: JSON.stringify({ day, slot }) }),
+    regenerateDay: (mealPlanId, day) =>
+      request(`/meal-plans/${mealPlanId}/regenerate-day`, { method: 'PUT', body: JSON.stringify({ day }) }),
+    getPrepInstructions: (mealPlanId) => request(`/meal-plans/${mealPlanId}/prep-instructions`),
+  },
+
+  shoppingLists: {
+    get: (mealPlanId) => request(`/shopping-lists/${mealPlanId}`),
+    regenerate: (mealPlanId) => request(`/shopping-lists/${mealPlanId}/regenerate`, { method: 'POST' }),
+    addItem: (mealPlanId, item) =>
+      request(`/shopping-lists/${mealPlanId}/items`, { method: 'POST', body: JSON.stringify(item) }),
+    toggleItem: (itemId) => request(`/shopping-lists/items/${itemId}/toggle`, { method: 'PUT' }),
+    removeItem: (itemId) => request(`/shopping-lists/items/${itemId}`, { method: 'DELETE' }),
   },
 };

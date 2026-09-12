@@ -41,27 +41,6 @@
   color: var(--text-secondary);
 }
 
-.dashboard-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.dashboard-user-email {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.dashboard-logout {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.4rem 0.75rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
 .dashboard-card {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border);
