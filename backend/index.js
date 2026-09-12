@@ -28,6 +28,9 @@ app.use('/api/meal-plans', require('./src/routes/mealPlans'));
 // Shopping list routes
 app.use('/api/shopping-lists', require('./src/routes/shoppingLists'));
 
+// Macro logging routes (log food, daily summary)
+app.use('/api/logs', require('./src/routes/logs'));
+
 // Placeholder for future routes
 // app.use('/api/users', require('./src/routes/users'));
 

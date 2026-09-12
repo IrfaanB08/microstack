@@ -1,0 +1,79 @@
+.login-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  border-radius: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px var(--shadow);
+  text-align: left;
+}
+
+.login-card h2 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.login-field input,
+.login-field select {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.login-card button[type='submit'] {
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-card button[type='submit']:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.login-card button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.login-error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 0.85rem;
+}

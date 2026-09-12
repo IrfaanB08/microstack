@@ -108,6 +108,16 @@ class SpoonacularClient {
   }
 
   /**
+   * Guess Nutrition by Dish Name - estimates macros for a free-text food
+   * description (e.g. "chicken caesar salad") without needing a full
+   * recipe match. Used for manual macro logging when an entry doesn't
+   * match anything in the user's meal plan.
+   */
+  async guessNutritionByDishName(title) {
+    return this.request('/recipes/guessNutrition', { title });
+  }
+
+  /**
    * Get request statistics
    */
   getStats() {

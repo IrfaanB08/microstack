@@ -101,6 +101,21 @@ class RateLimiter {
   }
 
   /**
+   * Mark today's quota as exhausted immediately, e.g. right after the API
+   * itself returns a quota-exceeded error. Saves every subsequent caller
+   * today a wasted network round trip just to re-discover what we already
+   * know, without needing them to reach into our internal counters.
+   */
+  markExhausted() {
+    this.resetIfNeeded();
+    this.dailyRequestCount = this.maxRequestsPerDay;
+    this.requestHistory.push({
+      timestamp: new Date().toISOString(),
+      count: this.dailyRequestCount,
+    });
+  }
+
+  /**
    * Reset the limiter (useful for testing)
    */
   reset() {

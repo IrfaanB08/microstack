@@ -70,6 +70,14 @@
   text-align: center;
 }
 
+/* The dashboard manages its own alignment - it's a scrolling list of
+   cards, not a single centered block like the login screen. */
+.app-main--dashboard {
+  align-items: flex-start;
+  justify-content: center;
+  text-align: left;
+}
+
 /* Mobile-first responsive adjustments */
 @media (max-width: 768px) {
   .app-header h1 {

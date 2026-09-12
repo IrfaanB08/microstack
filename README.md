@@ -76,6 +76,15 @@ npm run migrate
 
 The migration system uses `node-pg-migrate` to manage schema evolution. See `database/SCHEMA_RELATIONSHIPS.md` for detailed schema documentation.
 
+3. (Optional) Seed recipes from Spoonacular API:
+```bash
+cd backend
+npm run seed:recipes:dry    # Test run without database changes
+npm run seed:recipes        # Actually seed 200 recipes
+```
+
+The recipe seeding script uses the Spoonacular API to populate your database with diverse recipes. See `backend/scripts/README_RECIPE_SEEDING.md` for detailed documentation and cost analysis.
+
 ### Backend Setup
 
 1. Navigate to the backend directory:
@@ -204,6 +213,7 @@ The auth structure is prepared for:
 - `DATABASE_URL` - PostgreSQL connection string
 - `JWT_SECRET` - Secret key for JWT token signing
 - `NODE_ENV` - Environment (development/production)
+- `SPOONACULAR_API_KEY` - API key for recipe seeding (optional, for recipe population)
 
 ### Migration Commands
 ```bash

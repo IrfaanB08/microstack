@@ -1,0 +1,352 @@
+.dashboard {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.dashboard-status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+.dashboard-status--error {
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  color: var(--text-primary);
+}
+
+.dashboard-date {
+  margin: 0.15rem 0 0 0;
+  color: var(--text-secondary);
+}
+
+.dashboard-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dashboard-user-email {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.dashboard-logout {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.75rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.dashboard-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.dashboard-card h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.dashboard-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.dashboard-inline-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem 0;
+}
+
+/* Macro progress bars */
+.macro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.macro-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.macro-progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.macro-progress-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.macro-progress-values {
+  color: var(--text-secondary);
+}
+
+.macro-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background-color: var(--border);
+  overflow: hidden;
+}
+
+.macro-progress-fill {
+  height: 100%;
+  background-color: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.macro-progress-fill--over {
+  background-color: #f59e0b;
+}
+
+.macro-progress-percentage {
+  align-self: flex-end;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Planned meals */
+.planned-meal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.planned-meal-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.planned-meal-item:last-child {
+  border-bottom: none;
+}
+
+.planned-meal-slot {
+  flex: 0 0 80px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.planned-meal-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.planned-meal-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.planned-meal-macros,
+.log-entry-macros {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.planned-meal-empty {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.planned-meal-logged {
+  color: #16a34a;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.planned-meal-log-btn {
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.planned-meal-log-btn:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.planned-meal-log-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Log food form */
+.log-food-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.log-food-description {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.log-food-macros {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.log-food-macros input {
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.log-food-form button[type='submit'] {
+  align-self: flex-start;
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.log-food-form button[type='submit']:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.log-food-form button[type='submit']:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.match-banner {
+  margin: 0.75rem 0 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background-color: rgba(79, 70, 229, 0.12);
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+/* Logged entries */
+.log-entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-entry-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.log-entry-item:last-child {
+  border-bottom: none;
+}
+
+.log-entry-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.log-entry-description {
+  color: var(--text-primary);
+}
+
+.log-entry-tag {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.log-entry-delete {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.log-entry-delete:hover {
+  color: #dc2626;
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .macro-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .log-food-macros {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .planned-meal-item {
+    flex-wrap: wrap;
+  }
+}

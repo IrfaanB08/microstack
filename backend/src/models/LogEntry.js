@@ -12,11 +12,12 @@ class LogEntry {
       carbs_g,
       fat_g,
       source,
+      estimated,
     } = logData;
 
     const query = `
-      INSERT INTO log_entries (user_id, date, planned_meal_id, food_description, calories, protein_g, carbs_g, fat_g, source)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO log_entries (user_id, date, planned_meal_id, food_description, calories, protein_g, carbs_g, fat_g, source, estimated)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const values = [
@@ -29,6 +30,7 @@ class LogEntry {
       carbs_g || 0,
       fat_g || 0,
       source || 'manual',
+      estimated || false,
     ];
     const result = await pool.query(query, values);
     return result.rows[0];
@@ -116,11 +118,12 @@ class LogEntry {
       carbs_g,
       fat_g,
       source,
+      estimated,
     } = logData;
 
     const query = `
-      UPDATE log_entries 
-      SET 
+      UPDATE log_entries
+      SET
         planned_meal_id = COALESCE($1, planned_meal_id),
         food_description = COALESCE($2, food_description),
         calories = COALESCE($3, calories),
@@ -128,8 +131,9 @@ class LogEntry {
         carbs_g = COALESCE($5, carbs_g),
         fat_g = COALESCE($6, fat_g),
         source = COALESCE($7, source),
-        updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $8 
+        estimated = COALESCE($8, estimated),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $9
       RETURNING *
     `;
     const values = [
@@ -140,6 +144,7 @@ class LogEntry {
       carbs_g,
       fat_g,
       source,
+      estimated,
       id,
     ];
     const result = await pool.query(query, values);
