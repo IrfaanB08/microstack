@@ -215,27 +215,59 @@ function MealPlanScreen() {
                     const key = `${day}-${slot}`;
                     return (
                       <li key={slot} className="meal-slot-item">
-                        <span className="meal-slot-label">{MEAL_SLOT_LABELS[slot]}</span>
-                        {meal ? (
-                          <>
-                            <div className="meal-slot-details">
-                              <span className="meal-slot-name">{meal.recipe_name}</span>
-                              <span className="meal-slot-macros">
-                                {formatMacro(meal.calories)} cal &middot; {formatMacro(meal.protein_g)}g P &middot;{' '}
-                                {formatMacro(meal.carbs_g)}g C &middot; {formatMacro(meal.fat_g)}g F &middot;{' '}
-                                {meal.prep_time_minutes} min
-                              </span>
+                        <div className="meal-slot-row">
+                          <span className="meal-slot-label">{MEAL_SLOT_LABELS[slot]}</span>
+                          {meal ? (
+                            <>
+                              <div className="meal-slot-details">
+                                <span className="meal-slot-name">{meal.recipe_name}</span>
+                                <span className="meal-slot-macros">
+                                  {formatMacro(meal.calories)} cal &middot; {formatMacro(meal.protein_g)}g P &middot;{' '}
+                                  {formatMacro(meal.carbs_g)}g C &middot; {formatMacro(meal.fat_g)}g F &middot;{' '}
+                                  {meal.prep_time_minutes} min
+                                </span>
+                              </div>
+                              <button
+                                className="btn btn-secondary btn-small"
+                                onClick={() => handleSwap(day, slot)}
+                                disabled={swappingKey === key}
+                              >
+                                {swappingKey === key ? 'Swapping…' : 'Swap'}
+                              </button>
+                            </>
+                          ) : (
+                            <span className="meal-slot-empty">Nothing planned</span>
+                          )}
+                        </div>
+                        {meal && (
+                          <details className="meal-slot-prep">
+                            <summary>How to prepare</summary>
+                            <div className="meal-slot-prep-body">
+                              <p className="prep-subheading">Ingredients</p>
+                              {meal.ingredients && meal.ingredients.length > 0 ? (
+                                <ul>
+                                  {meal.ingredients.map((ingredient, idx) => (
+                                    <li key={idx}>
+                                      {ingredient.original
+                                        || [ingredient.quantity, ingredient.unit, ingredient.name].filter(Boolean).join(' ')}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="screen-hint">No ingredients saved for this recipe.</p>
+                              )}
+                              <p className="prep-subheading">Steps</p>
+                              {meal.steps && meal.steps.length > 0 ? (
+                                <ol>
+                                  {meal.steps.map((step, idx) => (
+                                    <li key={idx}>{typeof step === 'string' ? step : step.step}</li>
+                                  ))}
+                                </ol>
+                              ) : (
+                                <p className="screen-hint">No steps saved for this recipe.</p>
+                              )}
                             </div>
-                            <button
-                              className="btn btn-secondary btn-small"
-                              onClick={() => handleSwap(day, slot)}
-                              disabled={swappingKey === key}
-                            >
-                              {swappingKey === key ? 'Swapping…' : 'Swap'}
-                            </button>
-                          </>
-                        ) : (
-                          <span className="meal-slot-empty">Nothing planned</span>
+                          </details>
                         )}
                       </li>
                     );
