@@ -221,6 +221,22 @@ const authController = {
         }
       }
 
+      // Validate eating-out frequency if provided. This counts individual
+      // MEALS per week eaten out, not days (the mealPlanGenerator maps it
+      // 1:1 onto meal slots, and the onboarding/profile UI both label it
+      // "meals per week") - 0-21 covers every meal of every day, matching
+      // the users.eating_out_frequency check constraint. Without this,
+      // an out-of-range value reaches the database and comes back as a
+      // raw constraint-violation error instead of a clean 400.
+      if (profileData.eating_out_frequency !== undefined && profileData.eating_out_frequency !== null) {
+        const frequency = profileData.eating_out_frequency;
+        if (!Number.isInteger(frequency) || frequency < 0 || frequency > 21) {
+          return res.status(400).json({
+            error: 'eating_out_frequency must be an integer between 0 and 21 (meals per week eaten out)',
+          });
+        }
+      }
+
       // Update user profile
       const updatedUser = await User.updateProfile(userId, profileData);
 

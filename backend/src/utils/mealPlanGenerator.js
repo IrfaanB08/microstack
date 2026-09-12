@@ -155,36 +155,47 @@ class MealPlanGenerator {
   }
 
   /**
-   * Calculate which meals to plan based on eating-out frequency
+   * Calculate which meals to plan (home-cooked) vs. skip (eaten out),
+   * based on eating-out frequency.
+   *
+   * eating_out_frequency counts individual MEALS per week eaten out, not
+   * days (see users.eating_out_frequency's 0-21 check constraint: 3
+   * meals/day x 7 days) - the frontend's slider and label ("meals per
+   * week") agree. Skips are chosen in priority order (dinner first, as
+   * the most commonly-eaten-out meal, then lunch, breakfast, and finally
+   * snack), but within each priority level they're spread evenly across
+   * the 7 days (via the same floor(i * 7/n) trick used to distribute n
+   * items across 7 slots as uniformly as integer math allows) rather
+   * than filling day 0, 1, 2... in a block. A moderate frequency should
+   * take one meal off of several different days, not remove several
+   * meals from a couple of days while the rest of the week is untouched.
    */
   calculateMealsToPlan(eatingOutFrequency) {
+    const totalWeeklyMeals = this.daysOfWeek.length * this.mealSlots.length; // 28
+    const mealsToSkip = Math.min(Math.max(eatingOutFrequency || 0, 0), totalWeeklyMeals);
+
     const mealsToPlan = {};
-    const totalWeeklyMeals = 28; // 7 days × 4 meals
-    const mealsToSkip = Math.min(eatingOutFrequency || 0, totalWeeklyMeals);
-
-    // Skip dinner meals first, then lunch
-    const skippedMeals = [];
-    let mealsSkipped = 0;
-
-    // Skip dinners first
-    for (let day = 0; day < 7 && mealsSkipped < mealsToSkip; day++) {
-      skippedMeals.push({ day, slot: 'dinner' });
-      mealsSkipped++;
-    }
-
-    // Then skip lunches if needed
-    for (let day = 0; day < 7 && mealsSkipped < mealsToSkip; day++) {
-      skippedMeals.push({ day, slot: 'lunch' });
-      mealsSkipped++;
-    }
-
-    // Mark which meals to plan
     for (const day of this.daysOfWeek) {
       mealsToPlan[day] = {};
       for (const slot of this.mealSlots) {
-        const isSkipped = skippedMeals.some(m => m.day === day && m.slot === slot);
-        mealsToPlan[day][slot] = !isSkipped;
+        mealsToPlan[day][slot] = true;
       }
+    }
+
+    const skipPriority = ['dinner', 'lunch', 'breakfast', 'snack'];
+    const daysInWeek = this.daysOfWeek.length;
+    let remaining = mealsToSkip;
+
+    for (const slot of skipPriority) {
+      if (remaining <= 0) break;
+
+      const skipsThisSlot = Math.min(remaining, daysInWeek);
+      const step = daysInWeek / skipsThisSlot;
+      for (let i = 0; i < skipsThisSlot; i++) {
+        const day = this.daysOfWeek[Math.floor(i * step)];
+        mealsToPlan[day][slot] = false;
+      }
+      remaining -= skipsThisSlot;
     }
 
     return mealsToPlan;
@@ -314,36 +325,42 @@ class MealPlanGenerator {
           }
         }
 
-        // Calculate target calories for this slot with adaptive approach
-        const dayCaloriesSoFar = Object.values(assignments[day] || {})
-          .filter(r => r !== null)
-          .reduce((sum, r) => {
-            if (r._isCombined && r._combinationRecipes) {
-              return sum + r._totalCalories;
-            }
-            const multiplier = r._portionMultiplier || 1.0;
-            return sum + ((parseFloat(r.calories) || 0) * multiplier);
-          }, 0);
-        
-        const remainingCalories = macroTargetsByDay[day].calories - dayCaloriesSoFar;
+        // Calculate this slot's share of the day's REMAINING budget across
+        // all four macros - not just calories - so recipe selection can
+        // weigh protein/carbs/fat too, not only whether calories add up.
+        const dayMacrosSoFar = this.sumMealMacros(this.mealSlots.map((s) => assignments[day][s]));
         const remainingSlots = this.mealSlots.filter(s =>
           !assignments[day][s] && mealsToPlan[day]?.[s]
         ).length;
+        const slotDivisor = remainingSlots > 0 ? remainingSlots : 1;
 
-        // Use adaptive target based on remaining budget
-        const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
+        const targetPerSlot = {
+          calories: (macroTargetsByDay[day].calories - dayMacrosSoFar.calories) / slotDivisor,
+          protein_g: (macroTargetsByDay[day].protein_g - dayMacrosSoFar.protein_g) / slotDivisor,
+          carbs_g: (macroTargetsByDay[day].carbs_g - dayMacrosSoFar.carbs_g) / slotDivisor,
+          fat_g: (macroTargetsByDay[day].fat_g - dayMacrosSoFar.fat_g) / slotDivisor,
+        };
 
-        // Get suitable recipes for this slot
-        const slotRecipes = this.getRecipesForSlot(recipes, slot, usedRecipes);
+        // Get suitable recipes for this slot - preferring ones not used
+        // yet this week for variety. If every suitable recipe has
+        // already been used (a small pool relative to how many meals
+        // need planning, e.g. a very restrictive diet or a low
+        // eating-out frequency leaving many slots to fill), fall back to
+        // the full suitable pool and allow a repeat rather than leaving
+        // this slot - and the rest of the day - completely unplanned.
+        let slotRecipes = this.getRecipesForSlot(recipes, slot, usedRecipes);
+        if (slotRecipes.length === 0) {
+          slotRecipes = this.getRecipesForSlot(recipes, slot, new Set());
+        }
 
         if (slotRecipes.length > 0) {
           // Try to combine 2-3 recipes to hit target
           const mealCombination = this.combineRecipesForSlot(slotRecipes, targetPerSlot, usedRecipes, slot);
-          
+
           if (mealCombination) {
             // Mark all recipes in combination as used
             mealCombination.recipes.forEach(r => usedRecipes.add(r.id));
-            
+
             // Store as combined meal with realistic portion scaling
             assignments[day][slot] = {
               _isCombined: mealCombination.isCombined,
@@ -362,16 +379,20 @@ class MealPlanGenerator {
               day,
               mealsToPlan
             );
-            
-            // Calculate realistic portion multiplier (capped at 1.5x)
+
+            // Scale the chosen recipe's portion to close the remaining
+            // calorie gap (capped at 1.5x). Scaling by calories keeps the
+            // recipe's own macro ratio intact - which is the best a single
+            // recipe can do; selectRecipeForSlot already picked WHICH
+            // recipe based on fit across all four macros, not just this one.
             const recipeCalories = parseFloat(selectedRecipe.calories) || 1;
-            const portionMultiplier = Math.min(1.5, Math.max(1.0, targetPerSlot / recipeCalories));
-            
+            const portionMultiplier = Math.min(1.5, Math.max(1.0, targetPerSlot.calories / recipeCalories));
+
             assignments[day][slot] = {
               ...selectedRecipe,
               _portionMultiplier: portionMultiplier,
             };
-            
+
             usedRecipes.add(selectedRecipe.id);
           }
         } else {
@@ -412,16 +433,18 @@ class MealPlanGenerator {
           continue;
         }
 
-        const dayCaloriesSoFar = Object.values(assignments[day])
-          .filter((r) => r !== null)
-          .reduce((sum, r) => sum + (parseFloat(r.calories) || 0) * (r._portionMultiplier || 1.0), 0);
-
-        const remainingCalories = macroTargetsByDay[day].calories - dayCaloriesSoFar;
+        const dayCaloriesSoFar = this.sumMealMacros(Object.values(assignments[day])).calories;
         const remainingSlots = this.mealSlots.filter(
           (s) => !assignments[day][s] && mealsToPlan[day]?.[s]
         ).length;
-        const targetForSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
+        const targetForSlot = remainingSlots > 0
+          ? (macroTargetsByDay[day].calories - dayCaloriesSoFar) / remainingSlots
+          : 0;
 
+        // Batch mode doesn't choose WHICH recipe per day (selectBatchRecipePool
+        // already did that, weighing all four macros) - only how much of it,
+        // so scaling by calories alone is fine here; it keeps the recipe's
+        // own macro ratio intact.
         const recipeCalories = parseFloat(anchorRecipe.calories) || 1;
         const portionMultiplier = Math.min(1.5, Math.max(1.0, targetForSlot / recipeCalories));
 
@@ -438,21 +461,25 @@ class MealPlanGenerator {
   /**
    * Choose one anchor recipe per meal-slot type for a batch-preference
    * week. Each slot type that's actually needed this week (per
-   * mealsToPlan / eating-out frequency) gets the suitable recipe whose
-   * calories land closest to an even share of the daily calorie target -
+   * mealsToPlan / eating-out frequency) gets the suitable recipe that
+   * best fits an even share of the daily target across calories,
+   * protein, carbs, AND fat (see scoreMacroFit) - not calories alone -
    * this typically yields 3-4 unique recipes for the whole week, each one
    * repeated across every day that slot is planned.
    */
   selectBatchRecipePool(recipes, macroTargetsByDay, mealsToPlan) {
     const pool = {};
     const usedRecipeIds = new Set();
-    // Calorie targets are the same every day (macro cycling only shifts
-    // carbs/fat) - average across the week purely as a defensive guard in
-    // case that ever changes, rather than assuming day 0 is representative.
-    const avgDailyCalories = this.daysOfWeek.reduce(
-      (sum, day) => sum + macroTargetsByDay[day].calories, 0
-    ) / this.daysOfWeek.length;
-    const approxTargetPerSlot = avgDailyCalories / this.mealSlots.length;
+    // Targets can differ slightly day to day (macro cycling) - average
+    // across the week since one anchor recipe per slot has to serve every
+    // day that slot is planned.
+    const avgDailyTarget = this.averageMacroTargets(macroTargetsByDay);
+    const approxTargetPerSlot = {
+      calories: avgDailyTarget.calories / this.mealSlots.length,
+      protein_g: avgDailyTarget.protein_g / this.mealSlots.length,
+      carbs_g: avgDailyTarget.carbs_g / this.mealSlots.length,
+      fat_g: avgDailyTarget.fat_g / this.mealSlots.length,
+    };
 
     for (const slot of this.mealSlots) {
       const slotNeeded = this.daysOfWeek.some((day) => mealsToPlan[day]?.[slot]);
@@ -461,14 +488,19 @@ class MealPlanGenerator {
       const candidates = this.getRecipesForSlot(recipes, slot, usedRecipeIds);
       if (candidates.length === 0) continue;
 
-      const best = candidates.reduce((best, recipe) => {
-        const diff = Math.abs((parseFloat(recipe.calories) || 0) - approxTargetPerSlot);
-        return diff < best.diff ? { recipe, diff } : best;
-      }, { recipe: null, diff: Infinity });
+      let best = null;
+      let bestScore = Infinity;
+      for (const recipe of candidates) {
+        const score = this.scoreMacroFit(this.sumMealMacros([recipe]), approxTargetPerSlot);
+        if (score < bestScore) {
+          bestScore = score;
+          best = recipe;
+        }
+      }
 
-      if (best.recipe) {
-        pool[slot] = best.recipe;
-        usedRecipeIds.add(best.recipe.id);
+      if (best) {
+        pool[slot] = best;
+        usedRecipeIds.add(best.id);
       }
     }
 
@@ -534,115 +566,124 @@ class MealPlanGenerator {
   }
 
   /**
-   * Select a recipe for a specific slot considering macros
+   * Select a recipe for a specific slot considering macros.
+   *
+   * Scores every candidate by how well ITS OWN macros fit this slot's
+   * share of the day's remaining budget across calories, protein, carbs,
+   * AND fat (see scoreMacroFit) - not by calorie closeness alone, which
+   * previously let a calorie-matched but protein-poor recipe win over one
+   * that fit the full macro picture better.
    */
   selectRecipeForSlot(recipes, slot, macroTargets, currentAssignments, currentDay, mealsToPlan) {
-    // Calculate remaining calorie budget for the day
-    const dayCaloriesSoFar = Object.values(currentAssignments[currentDay] || {})
-      .filter(r => r !== null)
-      .reduce((sum, r) => {
-        if (r._isCombined && r._combinationRecipes) {
-          return sum + r._totalCalories;
-        }
-        const multiplier = r._portionMultiplier || 1.0;
-        return sum + ((parseFloat(r.calories) || 0) * multiplier);
-      }, 0);
-    
-    const remainingCalories = macroTargets.calories - dayCaloriesSoFar;
+    const dayMacrosSoFar = this.sumMealMacros(Object.values(currentAssignments[currentDay] || {}));
+
     const remainingSlots = this.mealSlots.filter(s =>
       !currentAssignments[currentDay]?.[s] && mealsToPlan[currentDay]?.[s]
     ).length;
-    
-    const targetPerSlot = remainingSlots > 0 ? remainingCalories / remainingSlots : 0;
+    const slotDivisor = remainingSlots > 0 ? remainingSlots : 1;
 
-    // Find recipes closest to target calories
-    const scoredRecipes = recipes.map(recipe => {
-      const recipeCalories = parseFloat(recipe.calories) || 0;
-      const calorieDiff = Math.abs(recipeCalories - targetPerSlot);
-      
-      // Score: closer to target is better
-      return {
-        recipe,
-        score: calorieDiff,
-        calories: recipeCalories,
-      };
-    });
+    const targetPerSlot = {
+      calories: (macroTargets.calories - dayMacrosSoFar.calories) / slotDivisor,
+      protein_g: (macroTargets.protein_g - dayMacrosSoFar.protein_g) / slotDivisor,
+      carbs_g: (macroTargets.carbs_g - dayMacrosSoFar.carbs_g) / slotDivisor,
+      fat_g: (macroTargets.fat_g - dayMacrosSoFar.fat_g) / slotDivisor,
+    };
 
-    // Sort by score (lowest diff first)
-    scoredRecipes.sort((a, b) => a.score - b.score);
+    let best = null;
+    let bestScore = Infinity;
+    for (const recipe of recipes) {
+      const score = this.scoreMacroFit(this.sumMealMacros([recipe]), targetPerSlot);
+      if (score < bestScore) {
+        bestScore = score;
+        best = recipe;
+      }
+    }
 
-    // Return the best matching recipe
-    return scoredRecipes[0].recipe;
+    return best;
   }
 
   /**
-   * Combine multiple recipes to hit calorie targets
+   * Combine multiple recipes to hit a slot's macro target.
+   *
+   * Every candidate combination is scored by scoreMacroFit across
+   * calories, protein, carbs, AND fat together - not by calorie
+   * closeness alone. A combination that lands on the right calorie count
+   * by pairing two high-fat/low-protein recipes now loses to one that's
+   * a bit further off on calories but far closer on protein, since each
+   * macro contributes to the score in proportion to its own target
+   * rather than calories (the largest number) drowning out the rest.
+   *
+   * @param {object} targetMacros - {calories, protein_g, carbs_g, fat_g}
    */
-  combineRecipesForSlot(recipes, targetCalories, usedRecipes, slot) {
+  combineRecipesForSlot(recipes, targetMacros, usedRecipes, slot) {
     // Allow more recipe reuse to avoid running out
     const availableRecipes = recipes.length > 30 ? recipes.filter(r => !usedRecipes.has(r.id)) : recipes;
-    
+
     if (availableRecipes.length === 0) return null;
 
     // For snack slot, limit to 1-2 items and lower calorie ceiling
     if (slot === 'snack') {
       const snackCeiling = 600; // Max 600 calories for snacks
-      const adjustedTarget = Math.min(targetCalories, snackCeiling);
-      
-      // Try combinations of 2 recipes only
+      const adjustedTarget = { ...targetMacros, calories: Math.min(targetMacros.calories, snackCeiling) };
+
+      // Try combinations of 2 recipes, keeping the best-scoring one that
+      // still falls in the sane 200-600 calorie range for a snack.
+      let bestSnackCombo = null;
+      let bestSnackScore = Infinity;
       for (let i = 0; i < availableRecipes.length; i++) {
         for (let j = i + 1; j < availableRecipes.length; j++) {
           const combo = [availableRecipes[i], availableRecipes[j]];
-          const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
-          
-          // For snacks, accept anything within 200-600 calories
-          if (totalCalories >= 200 && totalCalories <= snackCeiling) {
-            return {
-              recipes: combo,
-              totalCalories: totalCalories,
-              isCombined: true,
-            };
+          const comboMacros = this.sumMealMacros(combo);
+          if (comboMacros.calories < 200 || comboMacros.calories > snackCeiling) continue;
+
+          const score = this.scoreMacroFit(comboMacros, adjustedTarget);
+          if (score < bestSnackScore) {
+            bestSnackScore = score;
+            bestSnackCombo = { recipes: combo, totalCalories: comboMacros.calories, isCombined: true };
           }
         }
       }
-      
+      if (bestSnackCombo) return bestSnackCombo;
+
       // Fallback to single recipe
-      const bestSingle = availableRecipes.reduce((best, r) => {
-        const calories = parseFloat(r.calories);
-        const diff = Math.abs(calories - adjustedTarget);
-        return diff < best.diff ? { recipe: r, diff } : best;
-      }, { recipe: null, diff: Infinity });
-      
-      if (bestSingle.recipe) {
+      let bestSingle = null;
+      let bestSingleScore = Infinity;
+      for (const recipe of availableRecipes) {
+        const score = this.scoreMacroFit(this.sumMealMacros([recipe]), adjustedTarget);
+        if (score < bestSingleScore) {
+          bestSingleScore = score;
+          bestSingle = recipe;
+        }
+      }
+
+      if (bestSingle) {
         return {
-          recipes: [bestSingle.recipe],
-          totalCalories: parseFloat(bestSingle.recipe.calories),
+          recipes: [bestSingle],
+          totalCalories: parseFloat(bestSingle.calories),
           isCombined: false,
         };
       }
-      
+
       return null;
     }
 
     // For main meals (breakfast, lunch, dinner), find the best combination overall
     let bestCombination = null;
-    let bestDiff = Infinity;
+    let bestScore = Infinity;
+
+    const tryCombo = (combo) => {
+      const comboMacros = this.sumMealMacros(combo);
+      const score = this.scoreMacroFit(comboMacros, targetMacros);
+      if (score < bestScore) {
+        bestScore = score;
+        bestCombination = { recipes: combo, totalCalories: comboMacros.calories, isCombined: true };
+      }
+    };
 
     // Try combinations of 2 recipes
     for (let i = 0; i < availableRecipes.length; i++) {
       for (let j = i + 1; j < availableRecipes.length; j++) {
-        const combo = [availableRecipes[i], availableRecipes[j]];
-        const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
-        const diff = Math.abs(totalCalories - targetCalories);
-        
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          bestCombination = {
-            recipes: combo,
-            totalCalories: totalCalories,
-            isCombined: true,
-          };
-        }
+        tryCombo([availableRecipes[i], availableRecipes[j]]);
       }
     }
 
@@ -650,40 +691,18 @@ class MealPlanGenerator {
     for (let i = 0; i < availableRecipes.length; i++) {
       for (let j = i + 1; j < availableRecipes.length; j++) {
         for (let k = j + 1; k < availableRecipes.length; k++) {
-          const combo = [availableRecipes[i], availableRecipes[j], availableRecipes[k]];
-          const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
-          const diff = Math.abs(totalCalories - targetCalories);
-          
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            bestCombination = {
-              recipes: combo,
-              totalCalories: totalCalories,
-              isCombined: true,
-            };
-          }
+          tryCombo([availableRecipes[i], availableRecipes[j], availableRecipes[k]]);
         }
       }
     }
 
     // For larger targets, try combinations of 4 recipes
-    if (targetCalories > 800) {
+    if (targetMacros.calories > 800) {
       for (let i = 0; i < availableRecipes.length; i++) {
         for (let j = i + 1; j < availableRecipes.length; j++) {
           for (let k = j + 1; k < availableRecipes.length; k++) {
             for (let l = k + 1; l < availableRecipes.length; l++) {
-              const combo = [availableRecipes[i], availableRecipes[j], availableRecipes[k], availableRecipes[l]];
-              const totalCalories = combo.reduce((sum, r) => sum + parseFloat(r.calories), 0);
-              const diff = Math.abs(totalCalories - targetCalories);
-              
-              if (diff < bestDiff) {
-                bestDiff = diff;
-                bestCombination = {
-                  recipes: combo,
-                  totalCalories: totalCalories,
-                  isCombined: true,
-                };
-              }
+              tryCombo([availableRecipes[i], availableRecipes[j], availableRecipes[k], availableRecipes[l]]);
             }
           }
         }
@@ -695,45 +714,77 @@ class MealPlanGenerator {
   }
 
   /**
+   * Sum calories/protein/carbs/fat across a list of meals or raw recipes.
+   * Each entry is either a plain recipe (used as-is, multiplier 1), an
+   * already-assigned single recipe carrying an optional
+   * _portionMultiplier, or a combined meal carrying
+   * _isCombined/_combinationRecipes. Shared by the day-so-far tallies in
+   * assignMealsToSlots/selectRecipeForSlot and by calculateDailyMacros,
+   * so "how much of the day is already spoken for" is computed the same
+   * way everywhere instead of three slightly different reduces.
+   */
+  sumMealMacros(meals) {
+    return meals.filter((m) => m !== null && m !== undefined).reduce((sum, meal) => {
+      const parts = meal._isCombined && meal._combinationRecipes ? meal._combinationRecipes : [meal];
+      const multiplier = meal._isCombined ? 1.0 : (meal._portionMultiplier || 1.0);
+      for (const part of parts) {
+        sum.calories += (parseFloat(part.calories) || 0) * multiplier;
+        sum.protein_g += (parseFloat(part.protein_g) || 0) * multiplier;
+        sum.carbs_g += (parseFloat(part.carbs_g) || 0) * multiplier;
+        sum.fat_g += (parseFloat(part.fat_g) || 0) * multiplier;
+      }
+      return sum;
+    }, { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  }
+
+  /**
+   * Average a per-day macro target map into one target - used where a
+   * single recipe/anchor has to serve every day of the week (batch mode's
+   * anchor pool), since macro cycling can make targets differ slightly
+   * day to day.
+   */
+  averageMacroTargets(macroTargetsByDay) {
+    const sum = this.sumMealMacros(this.daysOfWeek.map((day) => macroTargetsByDay[day]));
+    const n = this.daysOfWeek.length;
+    return { calories: sum.calories / n, protein_g: sum.protein_g / n, carbs_g: sum.carbs_g / n, fat_g: sum.fat_g / n };
+  }
+
+  /**
+   * Score how well a candidate's macros fit a target, across calories,
+   * protein, carbs, AND fat - not calories alone. Each macro's error is
+   * expressed as a fraction of ITS OWN target (not raw grams/calories),
+   * so a 50% miss on fat (a typically-small number) counts the same as a
+   * 50% miss on calories (a typically-large one) - otherwise calories
+   * would dominate the score and a combination could look "good" while
+   * badly missing protein, which is exactly the bug this replaces.
+   * Lower is better; 0 is a perfect match on all four.
+   */
+  scoreMacroFit(candidateMacros, targetMacros) {
+    const fields = ['calories', 'protein_g', 'carbs_g', 'fat_g'];
+    let totalError = 0;
+    for (const field of fields) {
+      const target = targetMacros[field];
+      const actual = candidateMacros[field] || 0;
+      if (target > 0) {
+        totalError += Math.abs(actual - target) / target;
+      } else if (actual > 0) {
+        // Already at or over budget for this macro - any amount is a
+        // miss; scale by how much, so a small overage isn't scored the
+        // same as a huge one.
+        totalError += actual / (Math.abs(target) + 1);
+      }
+    }
+    return totalError;
+  }
+
+  /**
    * Calculate daily macro totals
    */
   calculateDailyMacros(assignments, recipes) {
     const dailyMacros = {};
 
     for (const day of this.daysOfWeek) {
-      dailyMacros[day] = {
-        calories: 0,
-        protein_g: 0,
-        carbs_g: 0,
-        fat_g: 0,
-      };
-
-      for (const slot of this.mealSlots) {
-        const meal = assignments[day][slot];
-        if (meal) {
-          // Handle combined meals
-          if (meal._isCombined && meal._combinationRecipes) {
-            const combinedMacros = meal._combinationRecipes.reduce((sum, r) => ({
-              calories: sum.calories + (parseFloat(r.calories) || 0),
-              protein_g: sum.protein_g + (parseFloat(r.protein_g) || 0),
-              carbs_g: sum.carbs_g + (parseFloat(r.carbs_g) || 0),
-              fat_g: sum.fat_g + (parseFloat(r.fat_g) || 0),
-            }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
-
-            dailyMacros[day].calories += combinedMacros.calories;
-            dailyMacros[day].protein_g += combinedMacros.protein_g;
-            dailyMacros[day].carbs_g += combinedMacros.carbs_g;
-            dailyMacros[day].fat_g += combinedMacros.fat_g;
-          } else {
-            // Single recipe with portion multiplier
-            const multiplier = meal._portionMultiplier || 1.0;
-            dailyMacros[day].calories += (parseFloat(meal.calories) || 0) * multiplier;
-            dailyMacros[day].protein_g += (parseFloat(meal.protein_g) || 0) * multiplier;
-            dailyMacros[day].carbs_g += (parseFloat(meal.carbs_g) || 0) * multiplier;
-            dailyMacros[day].fat_g += (parseFloat(meal.fat_g) || 0) * multiplier;
-          }
-        }
-      }
+      dailyMacros[day] = this.sumMealMacros(this.mealSlots.map((slot) => assignments[day][slot]));
     }
 
     return dailyMacros;
@@ -941,7 +992,12 @@ class MealPlanGenerator {
           continue;
         }
 
-        const slotRecipes = this.getRecipesForSlot(suitableRecipes, slot, usedRecipes);
+        // Same repeat-rather-than-blank fallback as the main weekly
+        // assignment loop - see assignMealsToSlots.
+        let slotRecipes = this.getRecipesForSlot(suitableRecipes, slot, usedRecipes);
+        if (slotRecipes.length === 0) {
+          slotRecipes = this.getRecipesForSlot(suitableRecipes, slot, new Set());
+        }
         if (slotRecipes.length > 0) {
           const selectedRecipe = this.selectRecipeForSlot(
             slotRecipes,
