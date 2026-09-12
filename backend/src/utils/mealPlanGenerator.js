@@ -884,6 +884,13 @@ class MealPlanGenerator {
 
       const dayAssignments = {};
       const usedRecipes = new Set();
+      // Wraps the live dayAssignments object (mutated below as each slot is
+      // filled) under its day index, in the shape selectRecipeForSlot
+      // expects. Because this wraps the same object by reference, each
+      // later slot in this loop sees every earlier slot already committed
+      // this pass - the same day-aware budget tracking swapMeal now uses,
+      // instead of scoring every slot as if the day were still empty.
+      const currentAssignments = { [day]: dayAssignments };
 
       for (const slot of this.mealSlots) {
         if (!mealsToPlan[day] || !mealsToPlan[day][slot]) {
@@ -894,10 +901,10 @@ class MealPlanGenerator {
         const slotRecipes = this.getRecipesForSlot(suitableRecipes, slot, usedRecipes);
         if (slotRecipes.length > 0) {
           const selectedRecipe = this.selectRecipeForSlot(
-            slotRecipes, 
-            slot, 
+            slotRecipes,
+            slot,
             macroTargets,
-            {},
+            currentAssignments,
             day,
             mealsToPlan
           );
