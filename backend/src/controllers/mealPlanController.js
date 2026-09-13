@@ -2,10 +2,12 @@ const MealPlanGenerator = require('../utils/mealPlanGenerator');
 const BatchPrepGenerator = require('../utils/batchPrepGenerator');
 const MealPlan = require('../models/MealPlan');
 const PlannedMeal = require('../models/PlannedMeal');
+const LogEntry = require('../models/LogEntry');
 const User = require('../models/User');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { getDayType, getWorkoutMealTag } = require('../utils/workoutSchedule');
 const { suggestEatingOutOptions } = require('../utils/eatingOutSuggestions');
+const { addDays } = require('../utils/dateHelpers');
 
 const mealPlanController = {
   /**
@@ -138,7 +140,9 @@ const mealPlanController = {
         }
       }
 
-      // Calculate daily and weekly totals
+      // Calculate daily and weekly totals - what the PLAN calls for that
+      // day (the sum of that day's assigned recipes), not what the user
+      // actually ate. See dailyLoggedTotals below for real logged intake.
       const dailyTotals = {};
       const weeklyTotals = {
         calories: 0,
@@ -173,6 +177,27 @@ const mealPlanController = {
           }
         }
       }
+
+      // What the user actually LOGGED (via the food-logging feature) on
+      // each day of this week - as distinct from dailyTotals above, which
+      // is just what the plan calls for. Each day of the week is its own
+      // real calendar date (week_start_date + day offset), so this has to
+      // query log_entries once per date rather than assuming "today" -
+      // a day with no log entries yet correctly comes back all zeros.
+      const weekStartDate = mealPlan.week_start_date;
+      const dailyLoggedTotals = {};
+      await Promise.all(
+        [0, 1, 2, 3, 4, 5, 6].map(async (day) => {
+          const date = addDays(weekStartDate, day);
+          const row = await LogEntry.getDailyTotals(userId, date);
+          dailyLoggedTotals[day] = {
+            calories: Number(row.total_calories) || 0,
+            protein_g: Number(row.total_protein) || 0,
+            carbs_g: Number(row.total_carbs) || 0,
+            fat_g: Number(row.total_fat) || 0,
+          };
+        })
+      );
 
       // Each day's actual macro target (same calories every day; carbs/fat
       // cycled toward carbs on a training day or fat on a rest day - see
@@ -232,6 +257,7 @@ const mealPlanController = {
         weeklyPlan,
         dailyTotals,
         weeklyTotals,
+        dailyLoggedTotals,
         eatingOutSuggestions,
         dailyTargets,
         dayTypes,

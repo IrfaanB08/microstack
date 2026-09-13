@@ -47,9 +47,17 @@ function getWeekStartDate(dateStr) {
   return formatDate(date);
 }
 
+/** Add (or subtract, with a negative count) days to a 'YYYY-MM-DD' date. */
+function addDays(dateStr, days) {
+  const date = parseDate(dateStr);
+  date.setDate(date.getDate() + days);
+  return formatDate(date);
+}
+
 module.exports = {
   getTodayDate,
   isValidDateString,
   getDayOfWeek,
   getWeekStartDate,
+  addDays,
 };

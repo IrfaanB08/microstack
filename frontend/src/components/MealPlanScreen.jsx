@@ -199,7 +199,8 @@ function MealPlanScreen() {
 
           {DAYS.map((day) => {
             const dayPlan = planData.weeklyPlan[day];
-            const totals = planData.dailyTotals[day];
+            const planned = planData.dailyTotals[day];
+            const logged = planData.dailyLoggedTotals?.[day];
             const target = planData.dailyTargets?.[day];
             const dayType = planData.dayTypes?.[day];
             return (
@@ -211,18 +212,28 @@ function MealPlanScreen() {
                       <span className={`day-type-badge day-type-badge--${dayType}`}>{DAY_TYPE_LABELS[dayType]}</span>
                     )}
                   </div>
-                  {totals && totals.calories > 0 && (
-                    <span className="day-card-totals">
-                      {formatMacro(totals.calories)} cal &middot; {formatMacro(totals.protein_g)}g P &middot;{' '}
-                      {formatMacro(totals.carbs_g)}g C &middot; {formatMacro(totals.fat_g)}g F
-                    </span>
-                  )}
                   {target && (
                     <span className="day-card-target">
                       Target: {formatMacro(target.calories)} cal &middot; {formatMacro(target.protein_g)}g P &middot;{' '}
                       {formatMacro(target.carbs_g)}g C &middot; {formatMacro(target.fat_g)}g F
                     </span>
                   )}
+                  {planned && planned.calories > 0 && (
+                    <span className="day-card-totals">
+                      Planned: {formatMacro(planned.calories)} cal &middot; {formatMacro(planned.protein_g)}g P &middot;{' '}
+                      {formatMacro(planned.carbs_g)}g C &middot; {formatMacro(planned.fat_g)}g F
+                    </span>
+                  )}
+                  <span className="day-card-logged">
+                    Logged: {logged ? (
+                      <>
+                        {formatMacro(logged.calories)} cal &middot; {formatMacro(logged.protein_g)}g P &middot;{' '}
+                        {formatMacro(logged.carbs_g)}g C &middot; {formatMacro(logged.fat_g)}g F
+                      </>
+                    ) : (
+                      'nothing logged yet'
+                    )}
+                  </span>
                 </div>
                 <ul className="meal-slot-list">
                   {MEAL_SLOTS.map((slot) => {

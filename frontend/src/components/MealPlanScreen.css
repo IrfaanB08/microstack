@@ -28,9 +28,14 @@
 }
 
 .day-card-totals,
-.day-card-target {
+.day-card-target,
+.day-card-logged {
   font-size: 0.78rem;
   color: var(--text-secondary);
+}
+
+.day-card-logged {
+  color: var(--accent);
 }
 
 .day-type-badge {
