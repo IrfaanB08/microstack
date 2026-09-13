@@ -1,5 +1,6 @@
 const ShoppingListItem = require('../models/ShoppingListItem');
 const MealPlan = require('../models/MealPlan');
+const PlannedMeal = require('../models/PlannedMeal');
 
 /**
  * Verify the meal plan exists and belongs to the requesting user.
@@ -36,8 +37,28 @@ const shoppingListController = {
         items = await ShoppingListItem.regenerateForMealPlan(meal_plan_id);
       }
 
+      // Flag ingredients shared across 2+ meals this week - buying them
+      // together in bulk saves a trip (and often money) rather than
+      // treating every occurrence as unrelated. Purely informational:
+      // it's laid on top of the already-aggregated items and never
+      // changes a quantity.
+      const plannedMeals = await PlannedMeal.findByMealPlanId(meal_plan_id);
+      const occurrenceCounts = ShoppingListItem.countIngredientOccurrences(plannedMeals);
+
+      const annotatedItems = items.map((item) => {
+        const key = ShoppingListItem.buildIngredientKey(item.ingredient_name, item.unit);
+        const occurrence = occurrenceCounts.get(key);
+        const mealCount = occurrence ? occurrence.mealCount : 0;
+        return {
+          ...item,
+          mealCount,
+          usedInRecipes: occurrence ? occurrence.recipeNames : [],
+          sharedAcrossMeals: mealCount >= 2,
+        };
+      });
+
       const groupedByAisle = {};
-      for (const item of items) {
+      for (const item of annotatedItems) {
         const category = item.grocery_aisle_category || 'other';
         if (!groupedByAisle[category]) groupedByAisle[category] = [];
         groupedByAisle[category].push(item);
@@ -46,10 +67,11 @@ const shoppingListController = {
       res.json({
         success: true,
         mealPlanId: meal_plan_id,
-        items,
+        items: annotatedItems,
         groupedByAisle,
-        totalItems: items.length,
-        checkedItems: items.filter((i) => i.checked).length,
+        totalItems: annotatedItems.length,
+        checkedItems: annotatedItems.filter((i) => i.checked).length,
+        sharedItemCount: annotatedItems.filter((i) => i.sharedAcrossMeals).length,
       });
     } catch (error) {
       console.error('Error getting shopping list:', error);

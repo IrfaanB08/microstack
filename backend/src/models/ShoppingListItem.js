@@ -111,6 +111,17 @@ class ShoppingListItem {
   }
 
   /**
+   * The grouping key used everywhere an ingredient needs to be matched
+   * across recipes - same name and unit, case-insensitive. Shared so
+   * aggregateIngredients (quantities) and countIngredientOccurrences
+   * (the "used in N meals" flag) agree on what counts as "the same
+   * ingredient" without the two ever drifting apart.
+   */
+  static buildIngredientKey(name, unit) {
+    return `${(name || '').toString().trim().toLowerCase()}::${(unit || '').toString().trim().toLowerCase()}`;
+  }
+
+  /**
    * Combine ingredients across all recipes in a set of planned meals,
    * summing quantities for ingredients that share the same name and unit.
    *
@@ -133,7 +144,7 @@ class ShoppingListItem {
         if (!name) continue;
 
         const unit = (ingredient.unit || '').toString().trim();
-        const key = `${name.toLowerCase()}::${unit.toLowerCase()}`;
+        const key = this.buildIngredientKey(name, unit);
         const rawQuantity = parseFloat(ingredient.quantity);
         const hasNumericQuantity = !Number.isNaN(rawQuantity);
         const numericQuantity = hasNumericQuantity ? rawQuantity / recipeYield : rawQuantity;
@@ -176,6 +187,51 @@ class ShoppingListItem {
         unit: entry.unit || null,
       };
     });
+  }
+
+  /**
+   * For each distinct ingredient (same name+unit grouping aggregateIngredients
+   * uses), count how many separate planned meals - not just how many times
+   * the ingredient line appears - call for it this week, and which recipes
+   * those are. This is the "leftover/batch" signal: an ingredient needed by
+   * 2+ different meals is worth buying in bulk rather than thinking of each
+   * occurrence as unrelated. Purely informational - it doesn't touch the
+   * quantities aggregateIngredients computes.
+   *
+   * A recipe that lists the same ingredient on two lines (e.g. "salt" for
+   * both the marinade and the sauce) only counts once per meal - the count
+   * is "how many meals", not "how many ingredient lines".
+   */
+  static countIngredientOccurrences(plannedMeals) {
+    const counts = new Map();
+
+    for (const plannedMeal of plannedMeals) {
+      const ingredients = plannedMeal.ingredients || [];
+      const seenInThisMeal = new Set();
+
+      for (const ingredient of ingredients) {
+        const name = (ingredient.name || ingredient.original || '').toString().trim();
+        if (!name) continue;
+
+        const unit = (ingredient.unit || '').toString().trim();
+        const key = this.buildIngredientKey(name, unit);
+        if (seenInThisMeal.has(key)) continue;
+        seenInThisMeal.add(key);
+
+        if (!counts.has(key)) {
+          counts.set(key, { mealCount: 0, recipeNames: new Set() });
+        }
+        const entry = counts.get(key);
+        entry.mealCount += 1;
+        if (plannedMeal.recipe_name) entry.recipeNames.add(plannedMeal.recipe_name);
+      }
+    }
+
+    const result = new Map();
+    for (const [key, entry] of counts) {
+      result.set(key, { mealCount: entry.mealCount, recipeNames: Array.from(entry.recipeNames) });
+    }
+    return result;
   }
 }
 

@@ -25,12 +25,21 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 .shopping-item:last-child {
   border-bottom: none;
+}
+
+/* An ingredient needed by 2+ meals this week - worth buying in bulk.
+   Floated to the top of its aisle group in JS; highlighted here so it
+   stands out from one-off ingredients at a glance. */
+.shopping-item--shared {
+  background-color: rgba(79, 70, 229, 0.07);
+  border-bottom-color: transparent;
 }
 
 .shopping-item-label {
@@ -49,6 +58,13 @@
   accent-color: var(--accent);
 }
 
+.shopping-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
 .shopping-item-name {
   color: var(--text-primary);
   font-size: 0.95rem;
@@ -62,6 +78,16 @@
 .shopping-item-qty {
   color: var(--text-secondary);
   font-size: 0.8rem;
+}
+
+.shopping-item-shared-badge {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  background-color: rgba(79, 70, 229, 0.12);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
 }
 
 .shopping-item-delete {

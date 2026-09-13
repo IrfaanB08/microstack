@@ -142,11 +142,21 @@ function ShoppingListScreen() {
   }
 
   const checkedCount = items.filter((i) => i.checked).length;
+  const sharedCount = items.filter((i) => i.sharedAcrossMeals).length;
   const groupedByAisle = {};
   for (const item of items) {
     const category = item.grocery_aisle_category || 'other';
     if (!groupedByAisle[category]) groupedByAisle[category] = [];
     groupedByAisle[category].push(item);
+  }
+  // Within each aisle, float shared-ingredient items to the top so they
+  // stand out as worth buying in bulk, without breaking the aisle
+  // grouping that makes the list usable while actually shopping.
+  for (const category of Object.keys(groupedByAisle)) {
+    groupedByAisle[category].sort((a, b) => {
+      if (a.sharedAcrossMeals === b.sharedAcrossMeals) return 0;
+      return a.sharedAcrossMeals ? -1 : 1;
+    });
   }
   const aislesPresent = AISLE_ORDER.filter((aisle) => groupedByAisle[aisle]?.length > 0);
 
@@ -155,7 +165,10 @@ function ShoppingListScreen() {
       <header className="screen-header">
         <div>
           <h1>Shopping List</h1>
-          <p className="screen-subtitle">{checkedCount} / {items.length} checked off</p>
+          <p className="screen-subtitle">
+            {checkedCount} / {items.length} checked off
+            {sharedCount > 0 && ` · ${sharedCount} shared across meals`}
+          </p>
         </div>
         <button className="btn btn-secondary btn-small" onClick={handleRegenerate} disabled={regenerating}>
           {regenerating ? 'Rebuilding…' : 'Rebuild from plan'}
@@ -183,17 +196,30 @@ function ShoppingListScreen() {
             <h2>{AISLE_LABELS[aisle] || aisle}</h2>
             <ul className="shopping-item-list">
               {groupedByAisle[aisle].map((item) => (
-                <li key={item.id} className="shopping-item">
+                <li
+                  key={item.id}
+                  className={`shopping-item${item.sharedAcrossMeals ? ' shopping-item--shared' : ''}`}
+                >
                   <label className="shopping-item-label">
                     <input
                       type="checkbox"
                       checked={item.checked}
                       onChange={() => handleToggle(item)}
                     />
-                    <span className={`shopping-item-name${item.checked ? ' shopping-item-name--checked' : ''}`}>
-                      {item.ingredient_name}
-                      {(item.quantity || item.unit) && (
-                        <span className="shopping-item-qty"> &middot; {item.quantity} {item.unit || ''}</span>
+                    <span className="shopping-item-text">
+                      <span className={`shopping-item-name${item.checked ? ' shopping-item-name--checked' : ''}`}>
+                        {item.ingredient_name}
+                        {(item.quantity || item.unit) && (
+                          <span className="shopping-item-qty"> &middot; {item.quantity} {item.unit || ''}</span>
+                        )}
+                      </span>
+                      {item.sharedAcrossMeals && (
+                        <span
+                          className="shopping-item-shared-badge"
+                          title={item.usedInRecipes?.length ? `Used in: ${item.usedInRecipes.join(', ')}` : undefined}
+                        >
+                          🔄 Used in {item.mealCount} meals this week
+                        </span>
                       )}
                     </span>
                   </label>
