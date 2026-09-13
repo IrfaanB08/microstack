@@ -228,6 +228,7 @@ function MealPlanScreen() {
                   {MEAL_SLOTS.map((slot) => {
                     const meal = dayPlan[slot];
                     const key = `${day}-${slot}`;
+                    const suggestions = planData.eatingOutSuggestions?.[day]?.[slot];
                     return (
                       <li key={slot} className="meal-slot-item">
                         <div className="meal-slot-row">
@@ -258,7 +259,7 @@ function MealPlanScreen() {
                               </button>
                             </>
                           ) : (
-                            <span className="meal-slot-empty">Nothing planned</span>
+                            <span className="meal-slot-empty">🍽️ Eating out</span>
                           )}
                         </div>
                         {meal && (
@@ -290,6 +291,27 @@ function MealPlanScreen() {
                               )}
                             </div>
                           </details>
+                        )}
+                        {!meal && suggestions && suggestions.length > 0 && (
+                          <div className="eating-out-suggestions">
+                            <p className="eating-out-suggestions-label">
+                              Menu ideas for your remaining budget this meal
+                            </p>
+                            <ul>
+                              {suggestions.map((suggestion, idx) => (
+                                <li key={idx} className="eating-out-suggestion">
+                                  <div className="eating-out-suggestion-text">
+                                    <span className="eating-out-suggestion-name">{suggestion.name}</span>
+                                    <span className="eating-out-suggestion-desc">{suggestion.description}</span>
+                                  </div>
+                                  <span className="eating-out-suggestion-macros">
+                                    ~{formatMacro(suggestion.calories)} cal &middot; {formatMacro(suggestion.protein_g)}g P &middot;{' '}
+                                    {formatMacro(suggestion.carbs_g)}g C &middot; {formatMacro(suggestion.fat_g)}g F
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                       </li>
                     );

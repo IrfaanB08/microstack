@@ -5,6 +5,7 @@ const PlannedMeal = require('../models/PlannedMeal');
 const User = require('../models/User');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { getDayType, getWorkoutMealTag } = require('../utils/workoutSchedule');
+const { suggestEatingOutOptions } = require('../utils/eatingOutSuggestions');
 
 const mealPlanController = {
   /**
@@ -185,6 +186,40 @@ const mealPlanController = {
         dayTypes[i] = getDayType(user, i) || 'neutral';
       }
 
+      // For each "eating out" slot (no home-cooked meal planned), suggest
+      // 2-3 restaurant-style dish categories sized to what's left of that
+      // day's macro budget after the home-cooked meals already planned -
+      // split evenly across however many eating-out slots that day has.
+      const eatingOutSuggestions = {};
+      if (dailyTargets) {
+        for (let day = 0; day < 7; day++) {
+          const eatingOutSlots = ['breakfast', 'lunch', 'dinner', 'snack'].filter(
+            (slot) => !weeklyPlan[day][slot]
+          );
+          if (eatingOutSlots.length === 0) continue;
+
+          const target = dailyTargets[day];
+          const actual = dailyTotals[day];
+          const remainingBudget = {
+            calories: Math.max(0, target.calories - actual.calories),
+            protein_g: Math.max(0, target.protein_g - actual.protein_g),
+            carbs_g: Math.max(0, target.carbs_g - actual.carbs_g),
+            fat_g: Math.max(0, target.fat_g - actual.fat_g),
+          };
+          const budgetPerSlot = {
+            calories: remainingBudget.calories / eatingOutSlots.length,
+            protein_g: remainingBudget.protein_g / eatingOutSlots.length,
+            carbs_g: remainingBudget.carbs_g / eatingOutSlots.length,
+            fat_g: remainingBudget.fat_g / eatingOutSlots.length,
+          };
+
+          eatingOutSuggestions[day] = {};
+          for (const slot of eatingOutSlots) {
+            eatingOutSuggestions[day][slot] = suggestEatingOutOptions(slot, budgetPerSlot);
+          }
+        }
+      }
+
       res.json({
         success: true,
         mealPlan: {
@@ -197,6 +232,7 @@ const mealPlanController = {
         weeklyPlan,
         dailyTotals,
         weeklyTotals,
+        eatingOutSuggestions,
         dailyTargets,
         dayTypes,
       });
